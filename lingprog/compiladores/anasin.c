@@ -1,12 +1,12 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define MAX_COMPRIMENTO 256
-#define NUM_PALAVRAS 36
+#define MAX_SIMBOLOS 512
+#define MAX_LISTA_IDS 128
 
-// cria o tipo tokens como enumeração, cada token tem um numero inteiro correspondente
 typedef enum
 {
     programa,
@@ -47,11 +47,48 @@ typedef enum
     ponto,
     numero,
     identificador,
-    fimdearquivo
+    comentario,
+    fimdearquivo,
+    token_invalido
 } token;
 
-// vetor de strings que podem aparecer no código, cada string tem um token correspondente no vetor de tokens
-char *palavras[NUM_PALAVRAS] = {
+typedef enum
+{
+    SIM_PROGRAMA,
+    SIM_ENTRADA_SAIDA,
+    SIM_TIPO,
+    SIM_VARIAVEL,
+    SIM_PROCEDIMENTO,
+    SIM_FUNCAO,
+    SIM_PARAMETRO
+} ClasseSimbolo;
+
+typedef struct
+{
+    char nome[MAX_COMPRIMENTO];
+    char tipo[MAX_COMPRIMENTO];
+    ClasseSimbolo classe;
+    int linha;
+    int coluna;
+    int escopo;
+    int ativo;
+} Simbolo;
+
+typedef struct
+{
+    FILE *arquivo;
+    char linha[MAX_COMPRIMENTO];
+    int pos;
+    int numeroLinha;
+    int colunaToken;
+    char buf[MAX_COMPRIMENTO];
+    char palavraAtual[MAX_COMPRIMENTO];
+    Simbolo simbolos[MAX_SIMBOLOS];
+    int totalSimbolos;
+    int escopoAtual;
+} Analisador;
+
+static const char *palavras[] = {
     "program", "label", "type", "var", "procedure",
     "function", "begin", "end", ":=", "if", "then", "else",
     "while", "do", "goto", "+", "-", "*", "div",
@@ -59,8 +96,7 @@ char *palavras[NUM_PALAVRAS] = {
     "and", "or", "not", "(", ")", "]",
     "[", ",", ";", ":", "."};
 
-// vetor de tokens correspondente ao vetor de strings que cada indice tem o tipo token criado acima
-token tokens[NUM_PALAVRAS] = {
+static const token tokens[] = {
     programa, rotulo, tipo, variavel, procedimento,
     funcao, inicio, fim, atribuicao, se, entao, senao,
     enquanto, faca, vapara, mais, menos, vezes, dividir,
@@ -68,80 +104,354 @@ token tokens[NUM_PALAVRAS] = {
     e, ou, nao, abreparenteses, fechaparenteses, fechacolchetes,
     abrecolchetes, virgula, pontoevirgula, doispontos, ponto};
 
-// palavras[i] = tokens[i]
-// Analex: recebe uma palavra e retorna o token correspondente
-token analex(char *palavra)
+static token proximoToken(Analisador *an);
+static void compila_programa(Analisador *an);
+static void compila_bloco(Analisador *an);
+static void compila_parametros_formais(Analisador *an);
+static void compila_comando(Analisador *an, token *t);
+static void compila_comando_sem_rotulo(Analisador *an, token *t);
+static void compila_expressao(Analisador *an, token *t);
+static void compila_expressao_simples(Analisador *an, token *t);
+static void compila_termo(Analisador *an, token *t);
+static void compila_fator(Analisador *an, token *t);
+
+static void erro(Analisador *an, const char *mensagem)
 {
-    for (int i = 0; i < NUM_PALAVRAS; i++)
-        if (strcmp(palavra, palavras[i]) == 0) // verifica se a palavra é uma palavra reservada ou símbolo
-            return tokens[i];                  // se for, retorna o token correspondente
-
-    // se não for uma palavra reservada ou símbolo, verifica se é um número ou identificador
-    for (int i = 0; palavra[i] != '\0'; i++)
-        if (!isdigit((unsigned char)palavra[i])) // se tiver um caractere que não seja número, é um identificador
-            return identificador;
-
-    return numero; // se todos os caracteres forem números, é um número
+    fprintf(stderr, "Erro sintatico na linha %d, coluna %d: %s. Token atual: \"%s\"\n",
+            an->numeroLinha, an->colunaToken, mensagem, an->palavraAtual);
+    exit(1);
 }
 
-// estrutura
-typedef struct
+#define ERRO(msg) erro(an, msg)
+
+static const char *nomeClasse(ClasseSimbolo classe)
 {
-    FILE *arquivo;          // o arquivo aberto
-    char linha[256];        // a linha que está sendo lida agora
-    int pos;                // qual caractere da linha estou olhando agora, indice
-    char buf[256];          // onde vou montar o token
-    char palavraAtual[256]; // guarda o token depois de pronto
-} Analisador;
+    switch (classe)
+    {
+    case SIM_PROGRAMA:
+        return "programa";
+    case SIM_ENTRADA_SAIDA:
+        return "entrada/saida";
+    case SIM_TIPO:
+        return "tipo";
+    case SIM_VARIAVEL:
+        return "variavel";
+    case SIM_PROCEDIMENTO:
+        return "procedimento";
+    case SIM_FUNCAO:
+        return "funcao";
+    case SIM_PARAMETRO:
+        return "parametro";
+    default:
+        return "desconhecido";
+    }
+}
 
-// compilador sintático -> ve se a estrutura do programa tá correta, se tem os tokens na ordem certa, etc
-// maligno quer q retorne o tipo do token
-
-token compila_programa(Analisador *an)
+static int buscaSimbolo(Analisador *an, const char *nome)
 {
-    token t;
+    for (int i = an->totalSimbolos - 1; i >= 0; i--)
+        if (an->simbolos[i].ativo && strcmp(an->simbolos[i].nome, nome) == 0)
+            return i;
+    return -1;
+}
 
-    /* Espera a palavra-chave 'program' */
-    t = proximoToken(an);
+static int buscaSimboloNoEscopoAtual(Analisador *an, const char *nome)
+{
+    for (int i = an->totalSimbolos - 1; i >= 0; i--)
+        if (an->simbolos[i].ativo &&
+            an->simbolos[i].escopo == an->escopoAtual &&
+            strcmp(an->simbolos[i].nome, nome) == 0)
+            return i;
+    return -1;
+}
+
+static void entraEscopo(Analisador *an)
+{
+    an->escopoAtual++;
+}
+
+static void saiEscopo(Analisador *an)
+{
+    for (int i = 0; i < an->totalSimbolos; i++)
+        if (an->simbolos[i].escopo == an->escopoAtual)
+            an->simbolos[i].ativo = 0;
+
+    if (an->escopoAtual > 0)
+        an->escopoAtual--;
+}
+
+static int ehTipoConhecido(Analisador *an, const char *nome)
+{
+    if (strcmp(nome, "integer") == 0 ||
+        strcmp(nome, "real") == 0 ||
+        strcmp(nome, "boolean") == 0 ||
+        strcmp(nome, "char") == 0)
+    {
+        return 1;
+    }
+
+    int indice = buscaSimbolo(an, nome);
+    return indice >= 0 && an->simbolos[indice].classe == SIM_TIPO;
+}
+
+static void adicionaSimbolo(Analisador *an, const char *nome, const char *tipoNome, ClasseSimbolo classe)
+{
+    if (buscaSimboloNoEscopoAtual(an, nome) >= 0)
+    {
+        char msg[MAX_COMPRIMENTO * 2];
+        snprintf(msg, sizeof(msg), "identificador '%s' ja declarado", nome);
+        erro(an, msg);
+    }
+
+    if (an->totalSimbolos >= MAX_SIMBOLOS)
+        erro(an, "tabela de simbolos cheia");
+
+    Simbolo *simbolo = &an->simbolos[an->totalSimbolos++];
+    strncpy(simbolo->nome, nome, sizeof(simbolo->nome) - 1);
+    simbolo->nome[sizeof(simbolo->nome) - 1] = '\0';
+    strncpy(simbolo->tipo, tipoNome, sizeof(simbolo->tipo) - 1);
+    simbolo->tipo[sizeof(simbolo->tipo) - 1] = '\0';
+    simbolo->classe = classe;
+    simbolo->linha = an->numeroLinha;
+    simbolo->coluna = an->colunaToken;
+    simbolo->escopo = an->escopoAtual;
+    simbolo->ativo = 1;
+}
+
+static void adicionaPreDefinido(Analisador *an, const char *nome, ClasseSimbolo classe)
+{
+    if (an->totalSimbolos >= MAX_SIMBOLOS)
+        erro(an, "tabela de simbolos cheia");
+
+    Simbolo *simbolo = &an->simbolos[an->totalSimbolos++];
+    strncpy(simbolo->nome, nome, sizeof(simbolo->nome) - 1);
+    simbolo->nome[sizeof(simbolo->nome) - 1] = '\0';
+    strcpy(simbolo->tipo, "-");
+    simbolo->classe = classe;
+    simbolo->linha = 0;
+    simbolo->coluna = 0;
+    simbolo->escopo = 0;
+    simbolo->ativo = 1;
+}
+
+static void exigeDeclarado(Analisador *an, const char *nome)
+{
+    if (buscaSimbolo(an, nome) < 0)
+    {
+        char msg[MAX_COMPRIMENTO * 2];
+        snprintf(msg, sizeof(msg), "identificador '%s' nao declarado", nome);
+        erro(an, msg);
+    }
+}
+
+static void imprimeTabelaSimbolos(Analisador *an)
+{
+    printf("\nTabela de simbolos:\n");
+    printf("%-20s %-15s %-15s %-8s %-8s\n", "Nome", "Classe", "Tipo", "Linha", "Escopo");
+    printf("---------------------------------------------------------------------\n");
+
+    for (int i = 0; i < an->totalSimbolos; i++)
+    {
+        printf("%-20s %-15s %-15s %-8d %-8d\n",
+               an->simbolos[i].nome,
+               nomeClasse(an->simbolos[i].classe),
+               an->simbolos[i].tipo[0] ? an->simbolos[i].tipo : "-",
+               an->simbolos[i].linha,
+               an->simbolos[i].escopo);
+    }
+}
+
+static token analex(const char *palavra)
+{
+    size_t total = sizeof(palavras) / sizeof(palavras[0]);
+    for (size_t i = 0; i < total; i++)
+        if (strcmp(palavra, palavras[i]) == 0)
+            return tokens[i];
+
+    if (isdigit((unsigned char)palavra[0]))
+    {
+        for (int i = 1; palavra[i] != '\0'; i++)
+            if (!isdigit((unsigned char)palavra[i]))
+                return token_invalido;
+        return numero;
+    }
+
+    if (isalpha((unsigned char)palavra[0]) || palavra[0] == '_')
+    {
+        for (int i = 1; palavra[i] != '\0'; i++)
+            if (!isalnum((unsigned char)palavra[i]) && palavra[i] != '_')
+                return token_invalido;
+        return identificador;
+    }
+
+    return token_invalido;
+}
+
+static int leLinha(Analisador *an)
+{
+    if (fgets(an->linha, MAX_COMPRIMENTO, an->arquivo) == NULL)
+        return 0;
+    an->pos = 0;
+    an->numeroLinha++;
+    return 1;
+}
+
+static int ignoraComentario(Analisador *an)
+{
+    if (an->linha[an->pos] == '{')
+    {
+        an->pos++;
+        while (an->linha[an->pos] != '}')
+        {
+            if (an->linha[an->pos] == '\0')
+            {
+                if (!leLinha(an))
+                {
+                    strcpy(an->palavraAtual, "EOF");
+                    erro(an, "comentario nao fechado");
+                }
+            }
+            else
+            {
+                an->pos++;
+            }
+        }
+        an->pos++;
+        return 1;
+    }
+
+    if (an->linha[an->pos] == '(' && an->linha[an->pos + 1] == '*')
+    {
+        an->pos += 2;
+        while (!(an->linha[an->pos] == '*' && an->linha[an->pos + 1] == ')'))
+        {
+            if (an->linha[an->pos] == '\0')
+            {
+                if (!leLinha(an))
+                {
+                    strcpy(an->palavraAtual, "EOF");
+                    erro(an, "comentario nao fechado");
+                }
+            }
+            else
+            {
+                an->pos++;
+            }
+        }
+        an->pos += 2;
+        return 1;
+    }
+
+    return 0;
+}
+
+static char *separaToken(Analisador *an)
+{
+    while (1)
+    {
+        while (an->linha[an->pos] && isspace((unsigned char)an->linha[an->pos]))
+            an->pos++;
+
+        if (an->linha[an->pos] == '\0')
+        {
+            if (!leLinha(an))
+                return NULL;
+            continue;
+        }
+
+        if (ignoraComentario(an))
+            continue;
+
+        break;
+    }
+
+    int i = 0;
+    char c = an->linha[an->pos];
+    an->colunaToken = an->pos + 1;
+
+    if (isdigit((unsigned char)c))
+    {
+        while (isdigit((unsigned char)an->linha[an->pos]))
+            an->buf[i++] = an->linha[an->pos++];
+    }
+    else if (isalpha((unsigned char)c) || c == '_')
+    {
+        while (isalnum((unsigned char)an->linha[an->pos]) || an->linha[an->pos] == '_')
+            an->buf[i++] = (char)tolower((unsigned char)an->linha[an->pos++]);
+    }
+    else if ((c == ':' && an->linha[an->pos + 1] == '=') ||
+             (c == '<' && an->linha[an->pos + 1] == '>') ||
+             (c == '<' && an->linha[an->pos + 1] == '=') ||
+             (c == '>' && an->linha[an->pos + 1] == '='))
+    {
+        an->buf[i++] = an->linha[an->pos++];
+        an->buf[i++] = an->linha[an->pos++];
+    }
+    else
+    {
+        an->buf[i++] = an->linha[an->pos++];
+    }
+
+    an->buf[i] = '\0';
+    return an->buf;
+}
+
+static token proximoToken(Analisador *an)
+{
+    char *palavra = separaToken(an);
+    if (palavra == NULL)
+    {
+        strcpy(an->palavraAtual, "EOF");
+        return fimdearquivo;
+    }
+
+    strncpy(an->palavraAtual, palavra, sizeof(an->palavraAtual) - 1);
+    an->palavraAtual[sizeof(an->palavraAtual) - 1] = '\0';
+
+    token t = analex(palavra);
+    if (t == token_invalido)
+        erro(an, "token invalido");
+    return t;
+}
+
+static void compila_programa(Analisador *an)
+{
+    token t = proximoToken(an);
     if (t != programa)
         ERRO("esperava 'program' no inicio do programa");
 
-    /* Nome do programa */
     t = proximoToken(an);
     if (t != identificador)
         ERRO("esperava identificador apos 'program'");
+    adicionaSimbolo(an, an->palavraAtual, "-", SIM_PROGRAMA);
 
-    /* '(' para a lista de arquivos de E/S */
     t = proximoToken(an);
-    if (t != abreparenteses)
-        ERRO("esperava '(' apos o nome do programa");
-
-    /* Lista de identificadores separados por ',' */
-    do
+    if (t == abreparenteses)
     {
-        t = proximoToken(an);
-        if (t != identificador)
-            ERRO("esperava identificador na lista de arquivos");
+        do
+        {
+            t = proximoToken(an);
+            if (t != identificador)
+                ERRO("esperava identificador na lista de arquivos");
+            adicionaSimbolo(an, an->palavraAtual, "-", SIM_ENTRADA_SAIDA);
+
+            t = proximoToken(an);
+            if (t != virgula && t != fechaparenteses)
+                ERRO("esperava ',' ou ')' na lista de arquivos");
+        } while (t == virgula);
 
         t = proximoToken(an);
-        if (t != virgula && t != fechaparenteses)
-            ERRO("esperava ',' ou ')' na lista de arquivos");
-    } while (t == virgula);
+    }
 
-    /* ';' antes do bloco principal */
-    t = proximoToken(an);
     if (t != pontoevirgula)
-        ERRO("esperava ';' apos ')'");
+        ERRO("esperava ';' apos cabecalho do programa");
 
-    /* Compila o bloco principal */
     compila_bloco(an);
 
-    /* '.' encerrando o programa */
     t = proximoToken(an);
     if (t != ponto)
         ERRO("esperava '.' ao final do programa");
 
-    /* Não deve haver nada depois do '.' */
     t = proximoToken(an);
     if (t != fimdearquivo)
         ERRO("conteudo inesperado apos '.'");
@@ -149,11 +459,10 @@ token compila_programa(Analisador *an)
     printf("Programa sintaticamente correto!\n");
 }
 
-void compila_bloco(Analisador *an)
+static void compila_bloco(Analisador *an)
 {
     token t = proximoToken(an);
 
-    /* ---- seção de rótulos: label num {, num} ; ---- */
     if (t == rotulo)
     {
         t = proximoToken(an);
@@ -175,13 +484,14 @@ void compila_bloco(Analisador *an)
         t = proximoToken(an);
     }
 
-    /* ---- seção de tipos: type id = id ; {id = id ;} ---- */
     if (t == tipo)
     {
         t = proximoToken(an);
-
         while (t == identificador)
         {
+            char nomeTipo[MAX_COMPRIMENTO];
+            strcpy(nomeTipo, an->palavraAtual);
+
             t = proximoToken(an);
             if (t != igual)
                 ERRO("esperava '=' apos identificador em 'type'");
@@ -189,6 +499,9 @@ void compila_bloco(Analisador *an)
             t = proximoToken(an);
             if (t != identificador)
                 ERRO("esperava nome de tipo apos '=' em 'type'");
+            if (!ehTipoConhecido(an, an->palavraAtual))
+                ERRO("tipo base nao declarado em 'type'");
+            adicionaSimbolo(an, nomeTipo, an->palavraAtual, SIM_TIPO);
 
             t = proximoToken(an);
             if (t != pontoevirgula)
@@ -198,37 +511,42 @@ void compila_bloco(Analisador *an)
         }
     }
 
-    /* ---- seção de variáveis: var id {, id} : tipo ; {id...} ---- */
     if (t == variavel)
     {
         t = proximoToken(an);
-
         while (t == identificador)
         {
-            /* lê lista de identificadores */
+            char ids[MAX_LISTA_IDS][MAX_COMPRIMENTO];
+            int totalIds = 0;
+
             while (1)
             {
+                if (totalIds >= MAX_LISTA_IDS)
+                    ERRO("muitos identificadores na mesma declaracao");
+                strcpy(ids[totalIds++], an->palavraAtual);
+
                 t = proximoToken(an);
-                if (t == virgula)
-                {
-                    t = proximoToken(an);
-                    if (t != identificador)
-                        ERRO("esperava identificador apos ',' em 'var'");
-                }
-                else
-                {
-                    break; /* saiu da lista */
-                }
+                if (t != virgula)
+                    break;
+
+                t = proximoToken(an);
+                if (t != identificador)
+                    ERRO("esperava identificador apos ',' em 'var'");
             }
 
-            /* ':' separando nomes do tipo */
             if (t != doispontos)
                 ERRO("esperava ':' apos lista de variaveis");
 
-            /* nome do tipo */
             t = proximoToken(an);
             if (t != identificador)
                 ERRO("esperava nome de tipo apos ':' em 'var'");
+            if (!ehTipoConhecido(an, an->palavraAtual))
+                ERRO("tipo nao declarado em 'var'");
+
+            char tipoVar[MAX_COMPRIMENTO];
+            strcpy(tipoVar, an->palavraAtual);
+            for (int i = 0; i < totalIds; i++)
+                adicionaSimbolo(an, ids[i], tipoVar, SIM_VARIAVEL);
 
             t = proximoToken(an);
             if (t != pontoevirgula)
@@ -238,28 +556,28 @@ void compila_bloco(Analisador *an)
         }
     }
 
-    /* ---- declarações de procedures e functions ---- */
     while (t == procedimento || t == funcao)
     {
-
         if (t == procedimento)
         {
-            /* procedure id [( params )] ; bloco ; */
             t = proximoToken(an);
             if (t != identificador)
                 ERRO("esperava identificador apos 'procedure'");
+            adicionaSimbolo(an, an->palavraAtual, "-", SIM_PROCEDIMENTO);
+            entraEscopo(an);
 
             t = proximoToken(an);
             if (t == abreparenteses)
             {
-                compila_parametros_formais(an); /* consome até o ')' */
+                compila_parametros_formais(an);
                 t = proximoToken(an);
             }
 
             if (t != pontoevirgula)
                 ERRO("esperava ';' apos cabecalho de 'procedure'");
 
-            compila_bloco(an); /* bloco interno da procedure */
+            compila_bloco(an);
+            saiEscopo(an);
 
             t = proximoToken(an);
             if (t != pontoevirgula)
@@ -269,10 +587,14 @@ void compila_bloco(Analisador *an)
         }
         else
         {
-            /* function id [( params )] : tipo ; bloco ; */
             t = proximoToken(an);
             if (t != identificador)
                 ERRO("esperava identificador apos 'function'");
+            char nomeFuncao[MAX_COMPRIMENTO];
+            strcpy(nomeFuncao, an->palavraAtual);
+            adicionaSimbolo(an, nomeFuncao, "-", SIM_FUNCAO);
+            int indiceFuncao = buscaSimbolo(an, nomeFuncao);
+            entraEscopo(an);
 
             t = proximoToken(an);
             if (t == abreparenteses)
@@ -287,12 +609,17 @@ void compila_bloco(Analisador *an)
             t = proximoToken(an);
             if (t != identificador)
                 ERRO("esperava tipo de retorno apos ':' em 'function'");
+            if (!ehTipoConhecido(an, an->palavraAtual))
+                ERRO("tipo de retorno nao declarado em 'function'");
+            strncpy(an->simbolos[indiceFuncao].tipo, an->palavraAtual, sizeof(an->simbolos[indiceFuncao].tipo) - 1);
+            an->simbolos[indiceFuncao].tipo[sizeof(an->simbolos[indiceFuncao].tipo) - 1] = '\0';
 
             t = proximoToken(an);
             if (t != pontoevirgula)
                 ERRO("esperava ';' apos cabecalho de 'function'");
 
             compila_bloco(an);
+            saiEscopo(an);
 
             t = proximoToken(an);
             if (t != pontoevirgula)
@@ -302,7 +629,6 @@ void compila_bloco(Analisador *an)
         }
     }
 
-    /* ---- corpo principal: begin ... end ---- */
     if (t != inicio)
         ERRO("esperava 'begin'");
 
@@ -315,18 +641,22 @@ void compila_bloco(Analisador *an)
         compila_comando(an, &t);
 
         if (t == pontoevirgula)
-        {
             t = proximoToken(an);
-        }
         else if (t != fim)
-        {
             ERRO("esperava ';' ou 'end' apos comando");
-        }
     }
-    /* 'end' já foi consumido pelo while; o chamador avança se precisar */
 }
 
-void compila_parametros_formais(Analisador *an)
+static void registraListaParametros(Analisador *an, char ids[][MAX_COMPRIMENTO], int totalIds, const char *tipoParam)
+{
+    if (!ehTipoConhecido(an, tipoParam))
+        erro(an, "tipo nao declarado em parametros formais");
+
+    for (int i = 0; i < totalIds; i++)
+        adicionaSimbolo(an, ids[i], tipoParam, SIM_PARAMETRO);
+}
+
+static void compila_parametros_formais(Analisador *an)
 {
     token t;
 
@@ -334,20 +664,27 @@ void compila_parametros_formais(Analisador *an)
     {
         t = proximoToken(an);
 
-        /* parâmetro por referência */
         if (t == variavel)
             t = proximoToken(an);
 
         if (t == identificador)
         {
-            /* lista de identificadores */
-            t = proximoToken(an);
-            while (t == virgula)
+            char ids[MAX_LISTA_IDS][MAX_COMPRIMENTO];
+            int totalIds = 0;
+
+            while (1)
             {
+                if (totalIds >= MAX_LISTA_IDS)
+                    ERRO("muitos parametros na mesma declaracao");
+                strcpy(ids[totalIds++], an->palavraAtual);
+
+                t = proximoToken(an);
+                if (t != virgula)
+                    break;
+
                 t = proximoToken(an);
                 if (t != identificador)
                     ERRO("esperava identificador apos ',' em parametros");
-                t = proximoToken(an);
             }
 
             if (t != doispontos)
@@ -356,23 +693,32 @@ void compila_parametros_formais(Analisador *an)
             t = proximoToken(an);
             if (t != identificador)
                 ERRO("esperava tipo em parametros formais");
+            registraListaParametros(an, ids, totalIds, an->palavraAtual);
 
             t = proximoToken(an);
         }
         else if (t == funcao)
         {
-            /* parâmetro do tipo function */
-            t = proximoToken(an);
-            if (t != identificador)
-                ERRO("esperava identificador apos 'function' em parametros");
+            char ids[MAX_LISTA_IDS][MAX_COMPRIMENTO];
+            int totalIds = 0;
 
             t = proximoToken(an);
-            while (t == virgula)
+            if (t != identificador)
+                ERRO("esperava identificador apos 'function' em parametros formais");
+
+            while (1)
             {
+                if (totalIds >= MAX_LISTA_IDS)
+                    ERRO("muitos parametros function na mesma declaracao");
+                strcpy(ids[totalIds++], an->palavraAtual);
+
+                t = proximoToken(an);
+                if (t != virgula)
+                    break;
+
                 t = proximoToken(an);
                 if (t != identificador)
-                    ERRO("esperava identificador apos ',' em parametros");
-                t = proximoToken(an);
+                    ERRO("esperava identificador apos ',' em parametro function");
             }
 
             if (t != doispontos)
@@ -381,39 +727,53 @@ void compila_parametros_formais(Analisador *an)
             t = proximoToken(an);
             if (t != identificador)
                 ERRO("esperava tipo de retorno em parametro function");
+            if (!ehTipoConhecido(an, an->palavraAtual))
+                ERRO("tipo de retorno nao declarado em parametro function");
+
+            for (int i = 0; i < totalIds; i++)
+                adicionaSimbolo(an, ids[i], an->palavraAtual, SIM_FUNCAO);
 
             t = proximoToken(an);
         }
         else if (t == procedimento)
         {
-            /* parâmetro do tipo procedure */
-            t = proximoToken(an);
-            if (t != identificador)
-                ERRO("esperava identificador apos 'procedure' em parametros");
+            char ids[MAX_LISTA_IDS][MAX_COMPRIMENTO];
+            int totalIds = 0;
 
             t = proximoToken(an);
-            while (t == virgula)
+            if (t != identificador)
+                ERRO("esperava identificador apos 'procedure' em parametros formais");
+
+            while (1)
             {
+                if (totalIds >= MAX_LISTA_IDS)
+                    ERRO("muitos parametros procedure na mesma declaracao");
+                strcpy(ids[totalIds++], an->palavraAtual);
+
+                t = proximoToken(an);
+                if (t != virgula)
+                    break;
+
                 t = proximoToken(an);
                 if (t != identificador)
-                    ERRO("esperava identificador apos ',' em parametros");
-                t = proximoToken(an);
+                    ERRO("esperava identificador apos ',' em parametro procedure");
             }
+
+            for (int i = 0; i < totalIds; i++)
+                adicionaSimbolo(an, ids[i], "-", SIM_PROCEDIMENTO);
         }
         else
         {
             ERRO("parametro formal invalido");
         }
-
     } while (t == pontoevirgula);
 
     if (t != fechaparenteses)
         ERRO("esperava ')' ao final dos parametros formais");
 }
 
-void compila_comando(Analisador *an, token *t)
+static void compila_comando(Analisador *an, token *t)
 {
-    /* Rótulos numéricos opcionais: 42 : comando */
     while (*t == numero)
     {
         *t = proximoToken(an);
@@ -425,17 +785,16 @@ void compila_comando(Analisador *an, token *t)
     compila_comando_sem_rotulo(an, t);
 }
 
-void compila_comando_sem_rotulo(Analisador *an, token *t)
+static void compila_comando_sem_rotulo(Analisador *an, token *t)
 {
-
     if (*t == identificador)
     {
-        /* id [ '[' expr {, expr} ']' ] ':=' expr
-           ou id '(' expr {, expr} ')'           */
+        char nome[MAX_COMPRIMENTO];
+        strcpy(nome, an->palavraAtual);
+        exigeDeclarado(an, nome);
 
         *t = proximoToken(an);
 
-        /* acesso a array no lado esquerdo: id[...] */
         if (*t == abrecolchetes)
         {
             *t = proximoToken(an);
@@ -452,18 +811,21 @@ void compila_comando_sem_rotulo(Analisador *an, token *t)
 
         if (*t == atribuicao)
         {
-            /* atribuição: id := expr */
             *t = proximoToken(an);
             compila_expressao(an, t);
         }
         else if (*t == abreparenteses)
         {
-            /* chamada de procedimento: id(expr {, expr}) */
-            do
+            *t = proximoToken(an);
+            if (*t != fechaparenteses)
             {
-                *t = proximoToken(an);
                 compila_expressao(an, t);
-            } while (*t == virgula);
+                while (*t == virgula)
+                {
+                    *t = proximoToken(an);
+                    compila_expressao(an, t);
+                }
+            }
 
             if (*t != fechaparenteses)
                 ERRO("esperava ')' ao final da chamada de procedimento");
@@ -471,12 +833,11 @@ void compila_comando_sem_rotulo(Analisador *an, token *t)
         }
         else
         {
-            ERRO("esperava ':=' ou '(' apos identificador em comando");
+            /* chamada de procedure sem parametros, como: r */
         }
     }
     else if (*t == vapara)
     {
-        /* goto numero */
         *t = proximoToken(an);
         if (*t != numero)
             ERRO("esperava numero apos 'goto'");
@@ -484,7 +845,6 @@ void compila_comando_sem_rotulo(Analisador *an, token *t)
     }
     else if (*t == inicio)
     {
-        /* begin ... end  (bloco de comandos composto) */
         *t = proximoToken(an);
         while (*t != fim)
         {
@@ -493,12 +853,13 @@ void compila_comando_sem_rotulo(Analisador *an, token *t)
             compila_comando(an, t);
             if (*t == pontoevirgula)
                 *t = proximoToken(an);
+            else if (*t != fim)
+                ERRO("esperava ';' ou 'end' em bloco composto");
         }
-        *t = proximoToken(an); /* consome 'end' */
+        *t = proximoToken(an);
     }
     else if (*t == se)
     {
-        /* if expr then comando [else comando] */
         *t = proximoToken(an);
         compila_expressao(an, t);
 
@@ -516,7 +877,6 @@ void compila_comando_sem_rotulo(Analisador *an, token *t)
     }
     else if (*t == enquanto)
     {
-        /* while expr do comando */
         *t = proximoToken(an);
         compila_expressao(an, t);
 
@@ -526,33 +886,28 @@ void compila_comando_sem_rotulo(Analisador *an, token *t)
         *t = proximoToken(an);
         compila_comando_sem_rotulo(an, t);
     }
-    /* Comando vazio é válido em Pascal; não precisa de else aqui */
 }
 
-void compila_expressao(Analisador *an, token *t)
+static void compila_expressao(Analisador *an, token *t)
 {
     compila_expressao_simples(an, t);
 
-    /* operadores relacionais */
     if (*t == igual || *t == diferente ||
         *t == menor || *t == menorouigual ||
         *t == maior || *t == maiorouigual)
     {
-
         *t = proximoToken(an);
         compila_expressao_simples(an, t);
     }
 }
 
-void compila_expressao_simples(Analisador *an, token *t)
+static void compila_expressao_simples(Analisador *an, token *t)
 {
-    /* sinal unário opcional */
     if (*t == mais || *t == menos)
         *t = proximoToken(an);
 
     compila_termo(an, t);
 
-    /* operadores aditivos */
     while (*t == mais || *t == menos || *t == ou)
     {
         *t = proximoToken(an);
@@ -560,7 +915,7 @@ void compila_expressao_simples(Analisador *an, token *t)
     }
 }
 
-void compila_termo(Analisador *an, token *t)
+static void compila_termo(Analisador *an, token *t)
 {
     compila_fator(an, t);
 
@@ -571,13 +926,16 @@ void compila_termo(Analisador *an, token *t)
     }
 }
 
-void compila_fator(Analisador *an, token *t)
+static void compila_fator(Analisador *an, token *t)
 {
     if (*t == identificador)
     {
+        char nome[MAX_COMPRIMENTO];
+        strcpy(nome, an->palavraAtual);
+        exigeDeclarado(an, nome);
+
         *t = proximoToken(an);
 
-        /* acesso a array: id[...] */
         if (*t == abrecolchetes)
         {
             *t = proximoToken(an);
@@ -590,16 +948,19 @@ void compila_fator(Analisador *an, token *t)
             if (*t != fechacolchetes)
                 ERRO("esperava ']' apos indice em fator");
             *t = proximoToken(an);
-
-            /* chamada de função: id(...) */
         }
         else if (*t == abreparenteses)
         {
-            do
+            *t = proximoToken(an);
+            if (*t != fechaparenteses)
             {
-                *t = proximoToken(an);
                 compila_expressao(an, t);
-            } while (*t == virgula);
+                while (*t == virgula)
+                {
+                    *t = proximoToken(an);
+                    compila_expressao(an, t);
+                }
+            }
 
             if (*t != fechaparenteses)
                 ERRO("esperava ')' ao final de chamada de funcao em fator");
@@ -608,7 +969,6 @@ void compila_fator(Analisador *an, token *t)
     }
     else if (*t == abreparenteses)
     {
-        /* expressão entre parênteses */
         *t = proximoToken(an);
         compila_expressao(an, t);
 
@@ -618,17 +978,37 @@ void compila_fator(Analisador *an, token *t)
     }
     else if (*t == nao)
     {
-        /* 'not' fator  (chamada recursiva) */
         *t = proximoToken(an);
         compila_fator(an, t);
     }
     else if (*t == numero)
     {
-        /* literal numérico */
         *t = proximoToken(an);
     }
     else
     {
         ERRO("fator invalido: esperava id, numero, '(' ou 'not'");
     }
+}
+
+int main(int argc, char **argv)
+{
+    const char *nomeArquivo = argc > 1 ? argv[1] : "exemplo.txt";
+    Analisador an;
+    memset(&an, 0, sizeof(an));
+    adicionaPreDefinido(&an, "read", SIM_PROCEDIMENTO);
+    adicionaPreDefinido(&an, "write", SIM_PROCEDIMENTO);
+
+    an.arquivo = fopen(nomeArquivo, "r");
+    if (!an.arquivo)
+    {
+        fprintf(stderr, "Erro ao abrir arquivo '%s'\n", nomeArquivo);
+        return 1;
+    }
+
+    compila_programa(&an);
+    imprimeTabelaSimbolos(&an);
+
+    fclose(an.arquivo);
+    return 0;
 }
