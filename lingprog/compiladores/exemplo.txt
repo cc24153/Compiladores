@@ -1,0 +1,16 @@
+program teste (input, output);
+var
+    x, y : integer;
+    resultado : integer;
+begin
+    x := 10;
+    y := 20;
+    resultado := x + y;
+    if resultado > 15 then
+        x := resultado
+    else
+        x := 0;
+    while x > 0 do
+        x := x - 1
+end.
+ 

@@ -1,0 +1,51 @@
+ENCONTRADO NO				TOKEN A SER
+ARQUIVO TEXTO				RETORNADO
+
+program						programa
+label						rotulo
+type						tipo
+var							variavel
+procedure					procedimento
+function					funcao
+begin						inicio
+end							fim
+:=							atribuicao
+if							se
+then						entao
+else						senao
+while						enquanto
+do							faca
+goto						vapara
+
++							mais
+-							menos
+*							vezes
+div							dividir
+
+=							igual
+<>							diferente
+<							menor
+<=							menorouigual
+>							maior
+>=							maiorouigual
+
+and							e
+or							ou
+not							nao
+
+(							abreparenteses
+)							fechaparenteses
+[							abrecolchetes
+]							fechacolchetes
+,							virgula
+;							pontoevirgula
+:							doispontos
+.							ponto
+
+sequencia de digitos		numero
+
+sequencias de letras,
+digitos ou underlines,
+comecando por uma letra		identificador
+e diferente de qualquer
+das palavra acima
