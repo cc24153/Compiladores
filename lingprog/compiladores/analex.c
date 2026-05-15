@@ -6,6 +6,10 @@
 #define MAX_COMPRIMENTO 256
 #define NUM_PALAVRAS 36
 
+// Mariana Marietti da Costa - 24140
+// Rafaelly Maria Nascimento da Silva - 24153
+// Samuel Rosa Parra - 24155
+
 
 // cria o tipo tokens como enumeração, cada token tem um numero inteiro correspondente
 typedef enum {

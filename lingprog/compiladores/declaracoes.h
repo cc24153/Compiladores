@@ -10,6 +10,11 @@
 #define NUM_PALAVRAS 36
 
 
+// Mariana Marietti da Costa - 24140
+// Rafaelly Maria Nascimento da Silva - 24153
+// Samuel Rosa Parra - 24155
+
+
 // cada palavra reservada vira um numero inteiro, o que facilita a comparação depois
 typedef enum
 {
