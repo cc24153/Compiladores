@@ -61,8 +61,9 @@ token analex(char *palavra) {
 }
 
 
+// para classificar uma palavra do nosso arquivo como token, precisamos ler o arquivo, separar em palavras e somente depois classificar em tokens
 
-// estrutura
+// estrutura para guardar o estado do analisador léxico, com o arquivo aberto, a linha atual, a posição atual, o buffer para montar o token e a palavra atual para imprimir depois
 typedef struct {
     FILE *arquivo;       // o arquivo aberto
     char  linha[256];    // a linha que está sendo lida agora
@@ -78,26 +79,29 @@ typedef struct {
 char *separaToken(Analisador *an) {
     // enquanto o caractere atual for espaço, tab ou nova linha,
     while (an->linha[an->pos] && isspace((unsigned char)an->linha[an->pos]))
+            // an pega o proximo caracter de linha e verifica se é espaço, tab ou nova linha, se for, pula o caractere
         an->pos++;  // pula o espaço
 
     // se chegar no fim da linha, ou seja, o caractere for nulo,
     if (!an->linha[an->pos])
         return NULL;    // retorna NULL para indicar que não tem mais token nessa linha
 
-    int i = 0;
+    int i = 0;  // indice para montar o token no buffer
 
     char c = an->linha[an->pos];     // olha o primeiro caractere para decidir o tipo do token
 
     // caso seja um número, continua lendo enquanto for número
     if (isdigit((unsigned char)c)) {
-        while (isdigit((unsigned char)an->linha[an->pos]))
-            an->buf[i++] = an->linha[an->pos++];
+        while (isdigit((unsigned char)an->linha[an->pos]))  // enquanto o caractere for número
+            an->buf[i++] = an->linha[an->pos++];   
+            // na proxima posicao do buffer coloca o caractere atual da linha e depois incrementa a posição para ler o próximo caractere, continua lendo enquanto for número
 
     }
     // caso seja uma letra ou _, continua lendo enquanto for letra, número ou _
     else if (isalpha((unsigned char)c) || c == '_') {
         while (isalnum((unsigned char)an->linha[an->pos]) || an->linha[an->pos] == '_')
-            an->buf[i++] = an->linha[an->pos++];    // isalnum verifica se é letra ou número, ou seja, continua lendo enquanto for letra, número ou _
+          // isalnum verifica se é letra ou número, ou seja, continua lendo enquanto for letra, número ou _
+            an->buf[i++] = an->linha[an->pos++];  
 
     }
     // caso seja um símbolo, verifica se é um símbolo de dois caracteres, senão é um símbolo de um caractere
@@ -108,7 +112,7 @@ char *separaToken(Analisador *an) {
         (c == '>' && an->linha[an->pos+1] == '=')
     ) {
         an->buf[i++] = an->linha[an->pos++];
-        an->buf[i++] = an->linha[an->pos++];
+        an->buf[i++] = an->linha[an->pos++]; 
 
     }
     // caso seja um símbolo de um caractere, lê o símbolo
