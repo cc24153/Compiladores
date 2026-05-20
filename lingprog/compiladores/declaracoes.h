@@ -14,37 +14,80 @@
 #define MAX_COMPRIMENTO 256 // tamanho maximo de uma linha, palavra ou token (número de bits que um token pode ocupar)
 #define NUM_PALAVRAS 36 // número de palavras reservadas, usado para comparar o token separado com as palavras reservadas
 
+#define MAX_SIMBOLOS 512        // tamanho maximo da tabela de simbolos, ou seja, o numero maximo de simbolos que podem ser declarados no programa, usado para verificar se a tabela de simbolos está cheia
+#define MAX_LISTA_IDS 128       // tamanho maximo de identificadores em uma mesma declaracao, usado para verificar se tem muitos identificadores na mesma declaracao
 
-// cada palavra reservada vira um numero inteiro, o que facilita a comparação depois
-typedef enum
-{
-    programa, rotulo, tipo, variavel, procedimento,
-    funcao, inicio, fim, atribuicao, se, entao, senao,
-    enquanto, faca, vapara, mais, menos, vezes, dividir,
-    igual, diferente, menor, menorouigual, maior, maiorouigual,
-    e, ou, nao, abreparenteses, fechaparenteses, fechacolchetes,
-    abrecolchetes, virgula, pontoevirgula, doispontos, ponto, numero,
-    identificador, fimdearquivo
+
+// enum de tokens, cada token tem um numero inteiro correspondente, usado para comparar o token separado com as palavras reservadas e simbolos
+typedef enum {
+    programa, rotulo, tipo, variavel, procedimento, funcao,
+    inicio, fim, atribuicao, se, entao, senao, enquanto, faca,
+    vapara, mais, menos, vezes, dividir, igual, diferente, menor,
+    menorouigual, maior, maiorouigual, e, ou, nao, abreparenteses, 
+    fechaparenteses, fechacolchetes, abrecolchetes, virgula, pontoevirgula,
+    doispontos, ponto, numero, identificador, comentario, fimdearquivo,
+    token_invalido
 } token;
 
-// funcao reutilizavel
-typedef struct
-{
-    FILE *arquivo;                      //ponteiro para o arquivo de entrada
-    char linha[MAX_COMPRIMENTO];        // linha atual lida
-    int pos;                            // posição prox char na linha
-    char buf[MAX_COMPRIMENTO];          // buffer onde o token separado vai ser escrito
-    char palavraAtual[MAX_COMPRIMENTO]; // palavra atual, usada para passar a string do token para o analisador sintático
+
+// enum de classes de simbolos para a tabela de simbolos, usado para verificar se um identificador é uma variavel, tipo, procedimento, etc
+typedef enum {
+    SIM_PROGRAMA,
+    SIM_ENTRADA_SAIDA,
+    SIM_TIPO,
+    SIM_VARIAVEL,
+    SIM_PROCEDIMENTO,
+    SIM_FUNCAO,
+    SIM_PARAMETRO
+} ClasseSimbolo;
+
+// struct de simbolo para a tabela de simbolos, cada simbolo tem um nome, tipo, classe, linha e coluna onde foi declarado, escopo onde foi declarado 
+// e se está ativo ou não (ou seja, se ainda pode ser usado ou já saiu do escopo)
+typedef struct {
+    char nome[MAX_COMPRIMENTO]; // nome do simbolo, usado para comparar com os identificadores no código
+    char tipo[MAX_COMPRIMENTO]; // tipo do simbolo, usado para verificar se o tipo de uma variavel é conhecido, ou o tipo de retorno de uma função é conhecido, etc
+    ClasseSimbolo classe;       // classe do simbolo, usado para verificar se um identificador é uma variavel, tipo, procedimento, etc
+    int linha;                  // linha onde o simbolo foi declarado, usado para imprimir na tabela de simbolos
+    int coluna;                 // coluna onde o simbolo foi declarado, usado para imprimir na tabela de simbolos
+    int escopo;                 // escopo onde o simbolo foi declarado, usado para verificar se um identificador está no escopo correto
+    int ativo;                  // indica se o simbolo está ativo (ainda pode ser usado) ou não (já saiu do escopo)
+} Simbolo;
+
+
+// struct de analisador léxico, usado para ler o arquivo de entrada, armazenar a linha atual, posição atual, buffer do token separado, 
+// palavra atual (string do token separado), tabela de simbolos, total de simbolos e escopo atual
+typedef struct {
+    FILE *arquivo;                  // o arquivo aberto, usado para ler o código fonte
+    char linha[MAX_COMPRIMENTO];    // a linha que está sendo lida agora, usada para separar os tokens e para imprimir na tabela de simbolos
+    int pos;                        // qual caractere da linha estou olhando agora, indice usado para separar os tokens e para imprimir na tabela de simbolos
+    int numeroLinha;                // numero da linha atual, usado para imprimir na tabela de simbolos
+    int colunaToken;                // coluna onde o token separado começa, usado para imprimir na tabela de simbolos
+    char buf[MAX_COMPRIMENTO];      // onde vou montar o token separado, usado para separar os tokens e para imprimir na tabela de simbolos
+    char palavraAtual[MAX_COMPRIMENTO]; // guarda a string do token separado, usada para passar a string do token para o analisador sintático e para imprimir na tabela de simbolos
+    Simbolo simbolos[MAX_SIMBOLOS];     // tabela de simbolos, usada para armazenar os simbolos declarados no programa e para verificar se um identificador é declarado, se o tipo de uma variavel é conhecido, etc
+    int totalSimbolos;              // total de simbolos na tabela de simbolos, usado para verificar se a tabela de simbolos está cheia e para imprimir a tabela de simbolos
+    int escopoAtual;                // escopo atual, usado para verificar se um identificador está no escopo correto e para imprimir na tabela de simbolos
 } Analisador;
 
+// função de erro, usada para imprimir mensagens de erro sintático com a linha, coluna e token atual, e para encerrar o programa
+void erro(Analisador *an, const char *mensagem);
 
 // funcoes do compilador lexico
 //funciona como uma interface, o analisador lexico chama as funcoes abaixo para separar o token, comparar com as palavras reservadas e passar a string do token para o analisador sintático
 char *separaToken(Analisador *analisa);
 token proximoToken(Analisador *analisa);
-token analex(char *palavra);
-int qualNumero(char *str);
-char *qualId(char *id);
+
+// funces do compilador sintático
+// como se fosse uma interface 
+void compila_programa(Analisador *an);
+void compila_bloco(Analisador *an);
+void compila_parametros_formais(Analisador *an);
+void compila_comando(Analisador *an, token *t);
+void compila_comando_sem_rotulo(Analisador *an, token *t);
+void compila_expressao(Analisador *an, token *t);
+void compila_expressao_simples(Analisador *an, token *t);
+void compila_termo(Analisador *an, token *t);
+void compila_fator(Analisador *an, token *t);
 
 
 #endif

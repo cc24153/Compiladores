@@ -2,135 +2,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "declaracoes.h"
 
 // Mariana Marietti da Costa - 24140
 // Rafaelly Maria Nascimento da Silva - 24153
 // Samuel Rosa Parra - 24155
 
 
-#define MAX_COMPRIMENTO 256
-#define MAX_SIMBOLOS 512
-#define MAX_LISTA_IDS 128
-
-typedef enum
-{
-    programa,
-    rotulo,
-    tipo,
-    variavel,
-    procedimento,
-    funcao,
-    inicio,
-    fim,
-    atribuicao,
-    se,
-    entao,
-    senao,
-    enquanto,
-    faca,
-    vapara,
-    mais,
-    menos,
-    vezes,
-    dividir,
-    igual,
-    diferente,
-    menor,
-    menorouigual,
-    maior,
-    maiorouigual,
-    e,
-    ou,
-    nao,
-    abreparenteses,
-    fechaparenteses,
-    fechacolchetes,
-    abrecolchetes,
-    virgula,
-    pontoevirgula,
-    doispontos,
-    ponto,
-    numero,
-    identificador,
-    comentario,
-    fimdearquivo,
-    token_invalido
-} token;
-
-typedef enum
-{
-    SIM_PROGRAMA,
-    SIM_ENTRADA_SAIDA,
-    SIM_TIPO,
-    SIM_VARIAVEL,
-    SIM_PROCEDIMENTO,
-    SIM_FUNCAO,
-    SIM_PARAMETRO
-} ClasseSimbolo;
-
-typedef struct
-{
-    char nome[MAX_COMPRIMENTO];
-    char tipo[MAX_COMPRIMENTO];
-    ClasseSimbolo classe;
-    int linha;
-    int coluna;
-    int escopo;
-    int ativo;
-} Simbolo;
-
-typedef struct
-{
-    FILE *arquivo;
-    char linha[MAX_COMPRIMENTO];
-    int pos;
-    int numeroLinha;
-    int colunaToken;
-    char buf[MAX_COMPRIMENTO];
-    char palavraAtual[MAX_COMPRIMENTO];
-    Simbolo simbolos[MAX_SIMBOLOS];
-    int totalSimbolos;
-    int escopoAtual;
-} Analisador;
-
-static const char *palavras[] = {
-    "program", "label", "type", "var", "procedure",
-    "function", "begin", "end", ":=", "if", "then", "else",
-    "while", "do", "goto", "+", "-", "*", "div",
-    "=", "<>", "<", "<=", ">", ">=",
-    "and", "or", "not", "(", ")", "]",
-    "[", ",", ";", ":", "."};
-
-static const token tokens[] = {
-    programa, rotulo, tipo, variavel, procedimento,
-    funcao, inicio, fim, atribuicao, se, entao, senao,
-    enquanto, faca, vapara, mais, menos, vezes, dividir,
-    igual, diferente, menor, menorouigual, maior, maiorouigual,
-    e, ou, nao, abreparenteses, fechaparenteses, fechacolchetes,
-    abrecolchetes, virgula, pontoevirgula, doispontos, ponto};
-
-static token proximoToken(Analisador *an);
-static void compila_programa(Analisador *an);
-static void compila_bloco(Analisador *an);
-static void compila_parametros_formais(Analisador *an);
-static void compila_comando(Analisador *an, token *t);
-static void compila_comando_sem_rotulo(Analisador *an, token *t);
-static void compila_expressao(Analisador *an, token *t);
-static void compila_expressao_simples(Analisador *an, token *t);
-static void compila_termo(Analisador *an, token *t);
-static void compila_fator(Analisador *an, token *t);
-
-static void erro(Analisador *an, const char *mensagem)
-{
+void erro(Analisador *an, const char *mensagem) {
     fprintf(stderr, "Erro sintatico na linha %d, coluna %d: %s. Token atual: \"%s\"\n",
-            an->numeroLinha, an->colunaToken, mensagem, an->palavraAtual);
+            an->numeroLinha, an->colunaToken, mensagem, an->palavraAtual);  // imprime a mensagem de erro com a linha, coluna e token atual para ajudar a localizar o erro no código fonte
     exit(1);
 }
-
 #define ERRO(msg) erro(an, msg)
 
-static const char *nomeClasse(ClasseSimbolo classe)
-{
+
+// funções auxiliares para o analisador sintático, usadas para manipular a tabela de símbolos, verificar tipos, etc:
+
+// nomeClasse: recebe uma classe de simbolo e retorna uma string com o nome da classe para imprimir na tabela de simbolos
+static const char *nomeClasse(ClasseSimbolo classe){
     switch (classe)
     {
     case SIM_PROGRAMA:
@@ -152,17 +42,17 @@ static const char *nomeClasse(ClasseSimbolo classe)
     }
 }
 
-static int buscaSimbolo(Analisador *an, const char *nome)
-{
-    for (int i = an->totalSimbolos - 1; i >= 0; i--)
-        if (an->simbolos[i].ativo && strcmp(an->simbolos[i].nome, nome) == 0)
+// buscaSimbolo: recebe um nome e retorna o índice do símbolo na tabela de símbolos, ou -1 se não encontrar
+static int buscaSimbolo(Analisador *an, const char *nome) {
+    for (int i = an->totalSimbolos - 1; i >= 0; i--)    // procura de trás para frente para encontrar o símbolo mais próximo (mais recente) com o nome dado, e que esteja ativo (ainda pode ser usado)
+        if (an->simbolos[i].ativo && strcmp(an->simbolos[i].nome, nome) == 0)   // verifica se o símbolo está ativo e se o nome do símbolo é igual ao nome dado, usando strcmp para comparar strings
             return i;
     return -1;
 }
 
-static int buscaSimboloNoEscopoAtual(Analisador *an, const char *nome)
-{
-    for (int i = an->totalSimbolos - 1; i >= 0; i--)
+// buscaSimboloNoEscopoAtual: recebe um nome e retorna o índice do símbolo na tabela de símbolos que está no escopo atual, ou -1 se não encontrar
+static int buscaSimboloNoEscopoAtual(Analisador *an, const char *nome) {
+    for (int i = an->totalSimbolos - 1; i >= 0; i--)    // procura de trás para frente para encontrar o símbolo mais próximo (mais recente) com o nome dado, que esteja ativo (ainda pode ser usado) e que esteja no escopo atual
         if (an->simbolos[i].ativo &&
             an->simbolos[i].escopo == an->escopoAtual &&
             strcmp(an->simbolos[i].nome, nome) == 0)
@@ -170,23 +60,21 @@ static int buscaSimboloNoEscopoAtual(Analisador *an, const char *nome)
     return -1;
 }
 
-static void entraEscopo(Analisador *an)
-{
-    an->escopoAtual++;
+// funções para manipular o escopo, usadas para entrar e sair de escopos em procedimentos e funções, e para verificar se um tipo é conhecido ou não
+static void entraEscopo(Analisador *an) {
+    an->escopoAtual++;  // incrementa o escopo atual para entrar em um novo escopo, usado para procedimentos e funções, e para verificar se um identificador está no escopo correto
 }
+static void saiEscopo(Analisador *an) {
+    for (int i = 0; i < an->totalSimbolos; i++) // desativa todos os símbolos que estão no escopo atual, ou seja, que não podem mais ser usados, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto
+        if (an->simbolos[i].escopo == an->escopoAtual)  // verifica se o símbolo está no escopo atual, ou seja, se foi declarado no escopo que está saindo
+            an->simbolos[i].ativo = 0;      // desativa o símbolo para indicar que não pode mais ser usado, ou seja, que saiu do escopo
 
-static void saiEscopo(Analisador *an)
-{
-    for (int i = 0; i < an->totalSimbolos; i++)
-        if (an->simbolos[i].escopo == an->escopoAtual)
-            an->simbolos[i].ativo = 0;
-
-    if (an->escopoAtual > 0)
+    if (an->escopoAtual > 0)    // decrementa o escopo atual para sair do escopo, garantindo que o escopo não fique negativo, e que o escopo 0 seja o escopo global onde estão os símbolos pré-definidos e os símbolos declarados no programa principal
         an->escopoAtual--;
 }
 
-static int ehTipoConhecido(Analisador *an, const char *nome)
-{
+// ehTipoConhecido: recebe um nome de tipo e verifica se é um tipo pré-definido ou um tipo declarado na tabela de símbolos, retornando 1 se for conhecido e 0 se não for
+static int ehTipoConhecido(Analisador *an, const char *nome) {
     if (strcmp(nome, "integer") == 0 ||
         strcmp(nome, "real") == 0 ||
         strcmp(nome, "boolean") == 0 ||
@@ -196,61 +84,66 @@ static int ehTipoConhecido(Analisador *an, const char *nome)
     }
 
     int indice = buscaSimbolo(an, nome);
-    return indice >= 0 && an->simbolos[indice].classe == SIM_TIPO;
+    return indice >= 0 && an->simbolos[indice].classe == SIM_TIPO; // verifica se o símbolo encontrado é um tipo, ou seja, se a classe do símbolo é SIM_TIPO, para garantir que o nome dado seja um tipo conhecido e não um identificador de variável, procedimento, etc
 }
 
-static void adicionaSimbolo(Analisador *an, const char *nome, const char *tipoNome, ClasseSimbolo classe)
-{
+// adicionaSimbolo: recebe um nome, tipo e classe, e adiciona um símbolo na tabela de símbolos, verificando se o nome já foi declarado no escopo atual e se a tabela de símbolos não está cheia
+static void adicionaSimbolo(Analisador *an, const char *nome, const char *tipoNome, ClasseSimbolo classe){
     if (buscaSimboloNoEscopoAtual(an, nome) >= 0)
     {
-        char msg[MAX_COMPRIMENTO * 2];
-        snprintf(msg, sizeof(msg), "identificador '%s' ja declarado", nome);
-        erro(an, msg);
+        char msg[MAX_COMPRIMENTO * 2];  // buffer para montar a mensagem de erro,
+        snprintf(msg, sizeof(msg), "identificador '%s' ja declarado", nome);    // monta a mensagem de erro indicando que o identificador já foi declarado, usando snprintf para formatar a string com o nome do identificador
+        erro(an, msg);  // imprime a mensagem de erro e encerra o programa,
     }
 
-    if (an->totalSimbolos >= MAX_SIMBOLOS)
+    // verifica se a tabela de símbolos está cheia antes de adicionar um novo símbolo, para evitar overflow e garantir que o programa não tente acessar índices inválidos na tabela de símbolos
+    if (an->totalSimbolos >= MAX_SIMBOLOS) {
         erro(an, "tabela de simbolos cheia");
+    }
 
-    Simbolo *simbolo = &an->simbolos[an->totalSimbolos++];
-    strncpy(simbolo->nome, nome, sizeof(simbolo->nome) - 1);
-    simbolo->nome[sizeof(simbolo->nome) - 1] = '\0';
-    strncpy(simbolo->tipo, tipoNome, sizeof(simbolo->tipo) - 1);
-    simbolo->tipo[sizeof(simbolo->tipo) - 1] = '\0';
-    simbolo->classe = classe;
-    simbolo->linha = an->numeroLinha;
-    simbolo->coluna = an->colunaToken;
-    simbolo->escopo = an->escopoAtual;
-    simbolo->ativo = 1;
+    Simbolo *simbolo = &an->simbolos[an->totalSimbolos++];      // adiciona um novo símbolo na tabela de símbolos, usando o totalSimbolos como índice para o próximo símbolo a ser adicionado, e depois incrementa o totalSimbolos para indicar que um novo símbolo foi adicionado
+    strncpy(simbolo->nome, nome, sizeof(simbolo->nome) - 1);    // copia o nome do símbolo para a struct do símbolo, limitando o tamanho para evitar overflow, e garantindo que seja uma string válida
+    simbolo->nome[sizeof(simbolo->nome) - 1] = '\0';            // finaliza a string do nome do símbolo com o caractere nulo para que seja uma string válida, e para imprimir na tabela de símbolos e mensagens de erro
+    strncpy(simbolo->tipo, tipoNome, sizeof(simbolo->tipo) - 1);    // copia o tipo do símbolo para a struct do símbolo, limitando o tamanho para evitar overflow, e garantindo que seja uma string válida
+    simbolo->tipo[sizeof(simbolo->tipo) - 1] = '\0';            // finaliza a string do tipo do símbolo com o caractere nulo para que seja uma string válida, e para imprimir na tabela de símbolos e mensagens de erro
+    simbolo->classe = classe;                                   // atribui a classe do símbolo para a struct do símbolo, usada para verificar se um identificador é uma variável, tipo, procedimento, etc, e para imprimir na tabela de símbolos
+    simbolo->linha = an->numeroLinha;                           // armazena a linha onde o símbolo foi declarado, usando o número da linha atual do analisador léxico, para imprimir na tabela de símbolos e mensagens de erro
+    simbolo->coluna = an->colunaToken;                          // armazena a coluna onde o símbolo foi declarado, usando a coluna do token atual do analisador léxico, para imprimir na tabela de símbolos e mensagens de erro
+    simbolo->escopo = an->escopoAtual;                          // armazena o escopo onde o símbolo foi declarado, usando o escopo atual do analisador sintático, para verificar se um identificador está no escopo correto e para imprimir na tabela de símbolos
+    simbolo->ativo = 1;                                         // marca o símbolo como ativo, ou seja, que ainda pode ser usado, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto
 }
 
-static void adicionaPreDefinido(Analisador *an, const char *nome, ClasseSimbolo classe)
-{
-    if (an->totalSimbolos >= MAX_SIMBOLOS)
+// adicionaPreDefinido: recebe um nome e uma classe, e adiciona um símbolo pré-definido na tabela de símbolos, usado para adicionar os tipos pré-definidos e os procedimentos de entrada/saída
+static void adicionaPreDefinido(Analisador *an, const char *nome, ClasseSimbolo classe) {
+    if (an->totalSimbolos >= MAX_SIMBOLOS)  // verifica se a tabela de símbolos está cheia antes de adicionar um novo símbolo pré-definido, para evitar overflow e garantir que o programa não tente acessar índices inválidos na tabela de símbolos
         erro(an, "tabela de simbolos cheia");
 
-    Simbolo *simbolo = &an->simbolos[an->totalSimbolos++];
-    strncpy(simbolo->nome, nome, sizeof(simbolo->nome) - 1);
-    simbolo->nome[sizeof(simbolo->nome) - 1] = '\0';
-    strcpy(simbolo->tipo, "-");
-    simbolo->classe = classe;
-    simbolo->linha = 0;
-    simbolo->coluna = 0;
-    simbolo->escopo = 0;
-    simbolo->ativo = 1;
+    Simbolo *simbolo = &an->simbolos[an->totalSimbolos++];  // adiciona um novo símbolo pré-definido na tabela de símbolos, usando o totalSimbolos como índice para o próximo símbolo a ser adicionado, e depois incrementa o totalSimbolos para indicar que um novo símbolo foi adicionado
+    strncpy(simbolo->nome, nome, sizeof(simbolo->nome) - 1);    // copia o nome do símbolo pré-definido para a struct do símbolo, limitando o tamanho para evitar overflow, e garantindo que seja uma string válida
+    simbolo->nome[sizeof(simbolo->nome) - 1] = '\0';        // finaliza a string do nome do símbolo pré-definido com o caractere nulo para que seja uma string válida, e para imprimir na tabela de símbolos e mensagens de erro
+    strcpy(simbolo->tipo, "-");                             // os símbolos pré-definidos não têm um tipo específico, então atribui "-" para indicar que o tipo é desconhecido ou não aplicável, usado para imprimir na tabela de símbolos e mensagens de erro
+    simbolo->classe = classe;                               // atribui a classe do símbolo pré-definido para a struct do símbolo, usada para verificar se um identificador é uma variável, tipo, procedimento, etc, e para imprimir na tabela de símbolos
+    simbolo->linha = 0;                                     // os símbolos pré-definidos não têm uma linha específica onde foram declarados, então atribui 0 para indicar que a linha é desconhecida ou não aplicável, usado para imprimir na tabela de símbolos e mensagens de erro
+    simbolo->coluna = 0;                                    // os símbolos pré-definidos não têm uma coluna específica onde foram declarados, então atribui 0 para indicar que a coluna é desconhecida ou não aplicável, usado para imprimir na tabela de símbolos e mensagens de erro
+    simbolo->escopo = 0;                                    // os símbolos pré-definidos estão no escopo global, que é o escopo 0, usado para verificar se um identificador está no escopo correto e para imprimir na tabela de símbolos
+    simbolo->ativo = 1;                                     // marca o símbolo pré-definido como ativo, ou seja, que ainda pode ser usado, para garantir que os símbolos pré-definidos possam ser usados em qualquer parte do programa  
 }
 
-static void exigeDeclarado(Analisador *an, const char *nome)
-{
-    if (buscaSimbolo(an, nome) < 0)
+// exigeDeclarado: recebe um nome e verifica se está declarado na tabela de símbolos, se não estiver, imprime uma mensagem de erro e encerra o programa
+static void exigeDeclarado(Analisador *an, const char *nome){
+    if (buscaSimbolo(an, nome) < 0) // se a função buscaSimbolo retornar um índice menor que 0, 
+    // significa que o nome dado não foi encontrado na tabela de símbolos, 
     {
+        // monta uma mensagem de erro indicando que o identificador não foi declarado,
         char msg[MAX_COMPRIMENTO * 2];
         snprintf(msg, sizeof(msg), "identificador '%s' nao declarado", nome);
         erro(an, msg);
     }
 }
 
-static void imprimeTabelaSimbolos(Analisador *an)
-{
+
+// imprimeTabelaSimbolos: imprime a tabela de símbolos no final da análise sintática, mostrando o nome, classe, tipo, linha e escopo de cada símbolo declarado no programa
+static void imprimeTabelaSimbolos(Analisador *an) {
     printf("\nTabela de simbolos:\n");
     printf("%-20s %-15s %-15s %-8s %-8s\n", "Nome", "Classe", "Tipo", "Linha", "Escopo");
     printf("---------------------------------------------------------------------\n");
@@ -266,175 +159,29 @@ static void imprimeTabelaSimbolos(Analisador *an)
     }
 }
 
-static token analex(const char *palavra)
-{
-    size_t total = sizeof(palavras) / sizeof(palavras[0]);
-    for (size_t i = 0; i < total; i++)
-        if (strcmp(palavra, palavras[i]) == 0)
-            return tokens[i];
 
-    if (isdigit((unsigned char)palavra[0]))
-    {
-        for (int i = 1; palavra[i] != '\0'; i++)
-            if (!isdigit((unsigned char)palavra[i]))
-                return token_invalido;
-        return numero;
-    }
+// funções de análise sintática, cada função corresponde a uma regra da gramática, e chama as funções correspondentes às regras que aparecem na regra dela
 
-    if (isalpha((unsigned char)palavra[0]) || palavra[0] == '_')
-    {
-        for (int i = 1; palavra[i] != '\0'; i++)
-            if (!isalnum((unsigned char)palavra[i]) && palavra[i] != '_')
-                return token_invalido;
-        return identificador;
-    }
 
-    return token_invalido;
-}
-
-static int leLinha(Analisador *an)
-{
-    if (fgets(an->linha, MAX_COMPRIMENTO, an->arquivo) == NULL)
-        return 0;
-    an->pos = 0;
-    an->numeroLinha++;
-    return 1;
-}
-
-static int ignoraComentario(Analisador *an)
-{
-    if (an->linha[an->pos] == '{')
-    {
-        an->pos++;
-        while (an->linha[an->pos] != '}')
-        {
-            if (an->linha[an->pos] == '\0')
-            {
-                if (!leLinha(an))
-                {
-                    strcpy(an->palavraAtual, "EOF");
-                    erro(an, "comentario nao fechado");
-                }
-            }
-            else
-            {
-                an->pos++;
-            }
-        }
-        an->pos++;
-        return 1;
-    }
-
-    if (an->linha[an->pos] == '(' && an->linha[an->pos + 1] == '*')
-    {
-        an->pos += 2;
-        while (!(an->linha[an->pos] == '*' && an->linha[an->pos + 1] == ')'))
-        {
-            if (an->linha[an->pos] == '\0')
-            {
-                if (!leLinha(an))
-                {
-                    strcpy(an->palavraAtual, "EOF");
-                    erro(an, "comentario nao fechado");
-                }
-            }
-            else
-            {
-                an->pos++;
-            }
-        }
-        an->pos += 2;
-        return 1;
-    }
-
-    return 0;
-}
-
-static char *separaToken(Analisador *an)
-{
-    while (1)
-    {
-        while (an->linha[an->pos] && isspace((unsigned char)an->linha[an->pos]))
-            an->pos++;
-
-        if (an->linha[an->pos] == '\0')
-        {
-            if (!leLinha(an))
-                return NULL;
-            continue;
-        }
-
-        if (ignoraComentario(an))
-            continue;
-
-        break;
-    }
-
-    int i = 0;
-    char c = an->linha[an->pos];
-    an->colunaToken = an->pos + 1;
-
-    if (isdigit((unsigned char)c))
-    {
-        while (isdigit((unsigned char)an->linha[an->pos]))
-            an->buf[i++] = an->linha[an->pos++];
-    }
-    else if (isalpha((unsigned char)c) || c == '_')
-    {
-        while (isalnum((unsigned char)an->linha[an->pos]) || an->linha[an->pos] == '_')
-            an->buf[i++] = (char)tolower((unsigned char)an->linha[an->pos++]);
-    }
-    else if ((c == ':' && an->linha[an->pos + 1] == '=') ||
-             (c == '<' && an->linha[an->pos + 1] == '>') ||
-             (c == '<' && an->linha[an->pos + 1] == '=') ||
-             (c == '>' && an->linha[an->pos + 1] == '='))
-    {
-        an->buf[i++] = an->linha[an->pos++];
-        an->buf[i++] = an->linha[an->pos++];
-    }
-    else
-    {
-        an->buf[i++] = an->linha[an->pos++];
-    }
-
-    an->buf[i] = '\0';
-    return an->buf;
-}
-
-static token proximoToken(Analisador *an)
-{
-    char *palavra = separaToken(an);
-    if (palavra == NULL)
-    {
-        strcpy(an->palavraAtual, "EOF");
-        return fimdearquivo;
-    }
-
-    strncpy(an->palavraAtual, palavra, sizeof(an->palavraAtual) - 1);
-    an->palavraAtual[sizeof(an->palavraAtual) - 1] = '\0';
-
-    token t = analex(palavra);
-    if (t == token_invalido)
-        erro(an, "token invalido");
-    return t;
-}
-
-static void compila_programa(Analisador *an)
-{
+static void compila_programa(Analisador *an) {
+    // verifica se o primeiro token é 'program', se não for, imprime uma mensagem de erro indicando que esperava 'program' no início do programa, e encerra o programa
     token t = proximoToken(an);
-    if (t != programa)
+    if (t != programa){
         ERRO("esperava 'program' no inicio do programa");
+    }
 
+    // verifica se o próximo token é um identificador, que é o nome do programa, se não for, imprime uma mensagem de erro indicando que esperava um identificador após 'program', e encerra o programa
     t = proximoToken(an);
-    if (t != identificador)
+    if (t != identificador){
         ERRO("esperava identificador apos 'program'");
-    adicionaSimbolo(an, an->palavraAtual, "-", SIM_PROGRAMA);
+    }
 
+    adicionaSimbolo(an, an->palavraAtual, "-", SIM_PROGRAMA);   // adiciona o nome do programa como um símbolo na tabela de símbolos, com tipo "-" para indicar que o tipo é desconhecido ou não aplicável, e classe SIM_PROGRAMA para indicar que é um programa
+
+    // verifica se o próximo token é um símbolo de abertura de parênteses, indicando que há uma lista de arquivos de entrada/saída, se for, chama a função para compilar a lista de arquivos, se não for, continua para verificar o próximo token
     t = proximoToken(an);
-    if (t == abreparenteses)
-    {
-        do
-        {
+    if (t == abreparenteses) {
+        do {
             t = proximoToken(an);
             if (t != identificador)
                 ERRO("esperava identificador na lista de arquivos");
@@ -448,24 +195,31 @@ static void compila_programa(Analisador *an)
         t = proximoToken(an);
     }
 
-    if (t != pontoevirgula)
+    // verifica se o próximo token é um ponto e vírgula, indicando o final do cabeçalho do programa, se não for, imprime uma mensagem de erro indicando que esperava ';' após o cabeçalho do programa, e encerra o programa
+    if (t != pontoevirgula){
         ERRO("esperava ';' apos cabecalho do programa");
+    }
+    
+    compila_bloco(an);  // chama a função para compilar o bloco do programa, que é a parte principal do programa onde estão as declarações e os comandos
 
-    compila_bloco(an);
-
+    // verifica se o próximo token é um ponto, indicando o final do programa, se não for, imprime uma mensagem de erro indicando que esperava '.' ao final do programa, e encerra o programa
     t = proximoToken(an);
-    if (t != ponto)
+    if (t != ponto){
         ERRO("esperava '.' ao final do programa");
+    }
 
+    // verifica se o próximo token é o fim de arquivo, indicando que não há mais conteúdo após o ponto final do programa, se não for, imprime uma mensagem de erro indicando que esperava fim de arquivo após '.', e encerra o programa
     t = proximoToken(an);
-    if (t != fimdearquivo)
+    if (t != fimdearquivo){
         ERRO("conteudo inesperado apos '.'");
+    }
 
     printf("Programa sintaticamente correto!\n");
 }
 
-static void compila_bloco(Analisador *an)
-{
+// preguica de comentar todos esses compila:
+
+static void compila_bloco(Analisador *an) {
     token t = proximoToken(an);
 
     if (t == rotulo)
@@ -652,8 +406,7 @@ static void compila_bloco(Analisador *an)
     }
 }
 
-static void registraListaParametros(Analisador *an, char ids[][MAX_COMPRIMENTO], int totalIds, const char *tipoParam)
-{
+static void registraListaParametros(Analisador *an, char ids[][MAX_COMPRIMENTO], int totalIds, const char *tipoParam) {
     if (!ehTipoConhecido(an, tipoParam))
         erro(an, "tipo nao declarado em parametros formais");
 
@@ -661,8 +414,7 @@ static void registraListaParametros(Analisador *an, char ids[][MAX_COMPRIMENTO],
         adicionaSimbolo(an, ids[i], tipoParam, SIM_PARAMETRO);
 }
 
-static void compila_parametros_formais(Analisador *an)
-{
+static void compila_parametros_formais(Analisador *an) {
     token t;
 
     do
@@ -776,9 +528,7 @@ static void compila_parametros_formais(Analisador *an)
     if (t != fechaparenteses)
         ERRO("esperava ')' ao final dos parametros formais");
 }
-
-static void compila_comando(Analisador *an, token *t)
-{
+static void compila_comando(Analisador *an, token *t) {
     while (*t == numero)
     {
         *t = proximoToken(an);
@@ -789,9 +539,7 @@ static void compila_comando(Analisador *an, token *t)
 
     compila_comando_sem_rotulo(an, t);
 }
-
-static void compila_comando_sem_rotulo(Analisador *an, token *t)
-{
+static void compila_comando_sem_rotulo(Analisador *an, token *t) {
     if (*t == identificador)
     {
         char nome[MAX_COMPRIMENTO];
@@ -892,9 +640,7 @@ static void compila_comando_sem_rotulo(Analisador *an, token *t)
         compila_comando_sem_rotulo(an, t);
     }
 }
-
-static void compila_expressao(Analisador *an, token *t)
-{
+static void compila_expressao(Analisador *an, token *t) {
     compila_expressao_simples(an, t);
 
     if (*t == igual || *t == diferente ||
@@ -905,9 +651,7 @@ static void compila_expressao(Analisador *an, token *t)
         compila_expressao_simples(an, t);
     }
 }
-
-static void compila_expressao_simples(Analisador *an, token *t)
-{
+static void compila_expressao_simples(Analisador *an, token *t) {
     if (*t == mais || *t == menos)
         *t = proximoToken(an);
 
@@ -919,9 +663,7 @@ static void compila_expressao_simples(Analisador *an, token *t)
         compila_termo(an, t);
     }
 }
-
-static void compila_termo(Analisador *an, token *t)
-{
+static void compila_termo(Analisador *an, token *t) {
     compila_fator(an, t);
 
     while (*t == vezes || *t == dividir || *t == e)
@@ -930,9 +672,7 @@ static void compila_termo(Analisador *an, token *t)
         compila_fator(an, t);
     }
 }
-
-static void compila_fator(Analisador *an, token *t)
-{
+static void compila_fator(Analisador *an, token *t) {
     if (*t == identificador)
     {
         char nome[MAX_COMPRIMENTO];
@@ -996,22 +736,24 @@ static void compila_fator(Analisador *an, token *t)
     }
 }
 
-int main(int argc, char **argv)
-{
-    const char *nomeArquivo = argc > 1 ? argv[1] : "exemplo.txt";
+
+// função principal, que inicializa o analisador, adiciona os procedimentos predefinidos "read" e "write" na tabela de simbolos, 
+// abre o arquivo de entrada, chama a função de compilar o programa, imprime a tabela de simbolos e fecha o arquivo
+int main(int argc, char **argv) {
+    const char *nomeArquivo = argc > 1 ? argv[1] : "exemplo.txt";   // permite passar o nome do arquivo como argumento, ou usar "exemplo.txt" por padrão
     Analisador an;
-    memset(&an, 0, sizeof(an));
-    adicionaPreDefinido(&an, "read", SIM_PROCEDIMENTO);
+    memset(&an, 0, sizeof(an));                                     // inicializa o analisador com zeros, para garantir que os campos estejam limpos
+    adicionaPreDefinido(&an, "read", SIM_PROCEDIMENTO);             // adiciona os procedimentos predefinidos "read" e "write" na tabela de simbolos, para que possam ser usados no programa sem precisar declarar
     adicionaPreDefinido(&an, "write", SIM_PROCEDIMENTO);
 
-    an.arquivo = fopen(nomeArquivo, "r");
+    an.arquivo = fopen(nomeArquivo, "r");   // tenta abrir o arquivo de entrada para leitura, e verifica se conseguiu abrir, caso contrário imprime uma mensagem de erro e encerra o programa
     if (!an.arquivo)
     {
         fprintf(stderr, "Erro ao abrir arquivo '%s'\n", nomeArquivo);
         return 1;
     }
 
-    compila_programa(&an);
+    compila_programa(&an);  // chama a função de compilar o programa, que é a função principal do analisador sintático
     imprimeTabelaSimbolos(&an);
 
     fclose(an.arquivo);
