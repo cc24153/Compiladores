@@ -6,8 +6,8 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-#define MAX_COMPRIMENTO 256
-#define NUM_PALAVRAS 36
+#define MAX_COMPRIMENTO 256 // tamanho maximo de uma linha, palavra ou token (número de bits que um token pode ocupar)
+#define NUM_PALAVRAS 36 // número de palavras reservadas, usado para comparar o token separado com as palavras reservadas
 
 
 // Mariana Marietti da Costa - 24140
@@ -30,7 +30,7 @@ typedef enum
 // funcao reutilizavel
 typedef struct
 {
-    FILE *arquivo;
+    FILE *arquivo;                      //ponteiro para o arquivo de entrada
     char linha[MAX_COMPRIMENTO];        // linha atual lida
     int pos;                            // posição prox char na linha
     char buf[MAX_COMPRIMENTO];          // buffer onde o token separado vai ser escrito
@@ -39,6 +39,7 @@ typedef struct
 
 
 // funcoes do compilador lexico
+//funciona como uma interface, o analisador lexico chama as funcoes abaixo para separar o token, comparar com as palavras reservadas e passar a string do token para o analisador sintático
 char *separaToken(Analisador *analisa);
 token proximoToken(Analisador *analisa);
 token analex(char *palavra);
