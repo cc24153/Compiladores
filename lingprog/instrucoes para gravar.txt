@@ -1,0 +1,26 @@
+gravar o léxico:
+	- separar 3 vídeos e juntar
+
+	- partes:
+		- 1: 0   - 64
+		- 2: 65  - 122
+		- 3: 123 - 163
+
+	- declarações.h partes:
+		- 1: 
+		- 2: 
+		- 3:
+
+gravar o sintático:
+	- comentar
+	- separar 3 vídeos e juntar
+
+	- partes:
+		- 1: 
+		- 2: 
+		- 3: 
+ 
+
+instruções:
+	- quem fica com a parte 1 fala o nome de todos do grupo; todos falem seu nome no inicio; a ultima pessoa roda o codigo
+	- gravem a tela e selecionem com o mouse oq estão explicando
