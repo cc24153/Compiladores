@@ -6,11 +6,6 @@ gravar o léxico:
 		- 2: 65  - 122
 		- 3: 123 - 163
 
-	- declarações.h partes:
-		- 1: 
-		- 2: 
-		- 3:
-
 gravar o sintático:
 	- comentar
 	- separar 3 vídeos e juntar
@@ -19,6 +14,11 @@ gravar o sintático:
 		- 1: 
 		- 2: 
 		- 3: 
+
+	- declarações.h partes:
+		- 1: 
+		- 2: 
+		- 3:
  
 
 instruções:
