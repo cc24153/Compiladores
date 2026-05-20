@@ -6,13 +6,13 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-#define MAX_COMPRIMENTO 256 // tamanho maximo de uma linha, palavra ou token (número de bits que um token pode ocupar)
-#define NUM_PALAVRAS 36 // número de palavras reservadas, usado para comparar o token separado com as palavras reservadas
-
-
 // Mariana Marietti da Costa - 24140
 // Rafaelly Maria Nascimento da Silva - 24153
 // Samuel Rosa Parra - 24155
+
+
+#define MAX_COMPRIMENTO 256 // tamanho maximo de uma linha, palavra ou token (número de bits que um token pode ocupar)
+#define NUM_PALAVRAS 36 // número de palavras reservadas, usado para comparar o token separado com as palavras reservadas
 
 
 // cada palavra reservada vira um numero inteiro, o que facilita a comparação depois

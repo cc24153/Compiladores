@@ -3,6 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Mariana Marietti da Costa - 24140
+// Rafaelly Maria Nascimento da Silva - 24153
+// Samuel Rosa Parra - 24155
+
+
 #define MAX_COMPRIMENTO 256
 #define MAX_SIMBOLOS 512
 #define MAX_LISTA_IDS 128
