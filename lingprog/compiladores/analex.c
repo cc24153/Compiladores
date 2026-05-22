@@ -58,7 +58,7 @@ static int leLinha(Analisador *an) {
 
 static int ignoraComentario(Analisador *an) {
     // comentário entre chaves
-    if (an->linha[an->pos] == '{')
+    if (an->linha[an->pos] == '{') {
         an->pos++;                  // pula a chave de abertura
         while (an->linha[an->pos] != '}')   // enquanto não encontrar a chave de fechamento
         {
@@ -112,7 +112,7 @@ static int ignoraComentario(Analisador *an) {
 // separaToken: recebe a linha e a posição atual, e retorna o próximo token como string
 char *separaToken(Analisador *an) {
     // enquanto o caractere atual for espaço em branco, tabulação ou nova linha, ou se tiver um comentário, ignora e continua procurando o próximo token
-    while (1) 
+    while (1)
     {
         // enquanto o caractere atual for espaço em branco, tabulação ou nova linha,
         while (an->linha[an->pos] && isspace((unsigned char)an->linha[an->pos]))
@@ -175,10 +175,6 @@ token proximoToken(Analisador *an) {
     if (palavra == NULL)                // se palavra for NULL, significa que chegou no fim do arquivo, 
     {
         strcpy(an->palavraAtual, "EOF");    // copia "EOF" (end of file) para a palavra atual para imprimir na mensagem de erro
-        return fimdearquivo;
-    }
-    {
-        strcpy(an->palavraAtual, "EOF");    // se palavra for uma string vazia, significa que chegou no fim do arquivo,
         return fimdearquivo;
     }
 
