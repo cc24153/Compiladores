@@ -9,6 +9,8 @@
 // Samuel Rosa Parra - 24155
 
 
+// MARIANA
+
 void erro(Analisador *an, const char *mensagem) {
     fprintf(stderr, "Erro sintatico na linha %d, coluna %d: %s. Token atual: \"%s\"\n",
             an->numeroLinha, an->colunaToken, mensagem, an->palavraAtual);  // imprime a mensagem de erro com a linha, coluna e token atual para ajudar a localizar o erro no código fonte
@@ -51,7 +53,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
 }
 
 // buscaSimboloNoEscopoAtual: recebe um nome e retorna o índice do símbolo na tabela de símbolos que está no escopo atual, ou -1 se não encontrar
-  int buscaSimboloNoEscopoAtual(Analisador *an, const char *nome) {
+int buscaSimboloNoEscopoAtual(Analisador *an, const char *nome) {
     for (int i = an->totalSimbolos - 1; i >= 0; i--)    // procura de trás para frente para encontrar o símbolo mais próximo (mais recente) com o nome dado, que esteja ativo (ainda pode ser usado) e que esteja no escopo atual
         if (an->simbolos[i].ativo &&
             an->simbolos[i].escopo == an->escopoAtual &&
@@ -61,10 +63,10 @@ int buscaSimbolo(Analisador *an, const char *nome) {
 }
 
 // funções para manipular o escopo, usadas para entrar e sair de escopos em procedimentos e funções, e para verificar se um tipo é conhecido ou não
-  void entraEscopo(Analisador *an) {
+void entraEscopo(Analisador *an) {
     an->escopoAtual++;  // incrementa o escopo atual para entrar em um novo escopo, usado para procedimentos e funções, e para verificar se um identificador está no escopo correto
 }
-  void saiEscopo(Analisador *an) {
+void saiEscopo(Analisador *an) {
     for (int i = 0; i < an->totalSimbolos; i++) // desativa todos os símbolos que estão no escopo atual, ou seja, que não podem mais ser usados, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto
         if (an->simbolos[i].escopo == an->escopoAtual)  // verifica se o símbolo está no escopo atual, ou seja, se foi declarado no escopo que está saindo
             an->simbolos[i].ativo = 0;      // desativa o símbolo para indicar que não pode mais ser usado, ou seja, que saiu do escopo
@@ -74,7 +76,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
 }
 
 // ehTipoConhecido: recebe um nome de tipo e verifica se é um tipo pré-definido ou um tipo declarado na tabela de símbolos, retornando 1 se for conhecido e 0 se não for
-  int ehTipoConhecido(Analisador *an, const char *nome) {
+int ehTipoConhecido(Analisador *an, const char *nome) {
     if (strcmp(nome, "integer") == 0 ||
         strcmp(nome, "real") == 0 ||
         strcmp(nome, "boolean") == 0 ||
@@ -88,7 +90,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
 }
 
 // adicionaSimbolo: recebe um nome, tipo e classe, e adiciona um símbolo na tabela de símbolos, verificando se o nome já foi declarado no escopo atual e se a tabela de símbolos não está cheia
-  void adicionaSimbolo(Analisador *an, const char *nome, const char *tipoNome, ClasseSimbolo classe){
+void adicionaSimbolo(Analisador *an, const char *nome, const char *tipoNome, ClasseSimbolo classe){
     if (buscaSimboloNoEscopoAtual(an, nome) >= 0)
     {
         char msg[MAX_COMPRIMENTO * 2];  // buffer para montar a mensagem de erro,
@@ -114,7 +116,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
 }
 
 // adicionaPreDefinido: recebe um nome e uma classe, e adiciona um símbolo pré-definido na tabela de símbolos, usado para adicionar os tipos pré-definidos e os procedimentos de entrada/saída
-  void adicionaPreDefinido(Analisador *an, const char *nome, ClasseSimbolo classe) {
+void adicionaPreDefinido(Analisador *an, const char *nome, ClasseSimbolo classe) {
     if (an->totalSimbolos >= MAX_SIMBOLOS)  // verifica se a tabela de símbolos está cheia antes de adicionar um novo símbolo pré-definido, para evitar overflow e garantir que o programa não tente acessar índices inválidos na tabela de símbolos
         erro(an, "tabela de simbolos cheia");
 
@@ -130,7 +132,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
 }
 
 // exigeDeclarado: recebe um nome e verifica se está declarado na tabela de símbolos, se não estiver, imprime uma mensagem de erro e encerra o programa
-  void exigeDeclarado(Analisador *an, const char *nome){
+void exigeDeclarado(Analisador *an, const char *nome){
     if (buscaSimbolo(an, nome) < 0) // se a função buscaSimbolo retornar um índice menor que 0, 
     // significa que o nome dado não foi encontrado na tabela de símbolos, 
     {
@@ -143,7 +145,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
 
 
 // imprimeTabelaSimbolos: imprime a tabela de símbolos no final da análise sintática, mostrando o nome, classe, tipo, linha e escopo de cada símbolo declarado no programa
-  void imprimeTabelaSimbolos(Analisador *an) {
+void imprimeTabelaSimbolos(Analisador *an) {
     printf("\nTabela de simbolos:\n");
     printf("%-20s %-15s %-15s %-8s %-8s\n", "Nome", "Classe", "Tipo", "Linha", "Escopo");
     printf("---------------------------------------------------------------------\n");
@@ -160,10 +162,11 @@ int buscaSimbolo(Analisador *an, const char *nome) {
 }
 
 
+// RAFAELLY
+
 // funções de análise sintática, cada função corresponde a uma regra da gramática, e chama as funções correspondentes às regras que aparecem na regra dela
 
-
-  void compila_programa(Analisador *an) {
+void compila_programa(Analisador *an) {
     // verifica se o primeiro token é 'program', se não for, imprime uma mensagem de erro indicando que esperava 'program' no início do programa, e encerra o programa
     token t = proximoToken(an);
     if (t != programa){
@@ -219,7 +222,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
 
 // preguica de comentar todos esses compila:
 
-  void compila_bloco(Analisador *an) {
+void compila_bloco(Analisador *an) {
     token t = proximoToken(an);
 
     if (t == rotulo)
@@ -406,7 +409,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
     }
 }
 
-  void registraListaParametros(Analisador *an, char ids[][MAX_COMPRIMENTO], int totalIds, const char *tipoParam) {
+void registraListaParametros(Analisador *an, char ids[][MAX_COMPRIMENTO], int totalIds, const char *tipoParam) {
     if (!ehTipoConhecido(an, tipoParam))
         erro(an, "tipo nao declarado em parametros formais");
 
@@ -414,7 +417,9 @@ int buscaSimbolo(Analisador *an, const char *nome) {
         adicionaSimbolo(an, ids[i], tipoParam, SIM_PARAMETRO);
 }
 
-  void compila_parametros_formais(Analisador *an) {
+// SAMUEL
+
+void compila_parametros_formais(Analisador *an) {
     token t;
 
     do
@@ -528,7 +533,8 @@ int buscaSimbolo(Analisador *an, const char *nome) {
     if (t != fechaparenteses)
         ERRO("esperava ')' ao final dos parametros formais");
 }
-  void compila_comando(Analisador *an, token *t) {
+
+void compila_comando(Analisador *an, token *t) {
     while (*t == numero)
     {
         *t = proximoToken(an);
@@ -539,7 +545,8 @@ int buscaSimbolo(Analisador *an, const char *nome) {
 
     compila_comando_sem_rotulo(an, t);
 }
-  void compila_comando_sem_rotulo(Analisador *an, token *t) {
+
+void compila_comando_sem_rotulo(Analisador *an, token *t) {
     if (*t == identificador)
     {
         char nome[MAX_COMPRIMENTO];
@@ -640,7 +647,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
         compila_comando_sem_rotulo(an, t);
     }
 }
-  void compila_expressao(Analisador *an, token *t) {
+void compila_expressao(Analisador *an, token *t) {
     compila_expressao_simples(an, t);
 
     if (*t == igual || *t == diferente ||
@@ -651,7 +658,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
         compila_expressao_simples(an, t);
     }
 }
-  void compila_expressao_simples(Analisador *an, token *t) {
+void compila_expressao_simples(Analisador *an, token *t) {
     if (*t == mais || *t == menos)
         *t = proximoToken(an);
 
@@ -663,7 +670,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
         compila_termo(an, t);
     }
 }
-  void compila_termo(Analisador *an, token *t) {
+void compila_termo(Analisador *an, token *t) {
     compila_fator(an, t);
 
     while (*t == vezes || *t == dividir || *t == e)
@@ -672,7 +679,7 @@ int buscaSimbolo(Analisador *an, const char *nome) {
         compila_fator(an, t);
     }
 }
-  void compila_fator(Analisador *an, token *t) {
+void compila_fator(Analisador *an, token *t) {
     if (*t == identificador)
     {
         char nome[MAX_COMPRIMENTO];

@@ -2,23 +2,18 @@ gravar o léxico:
 	- separar 3 vídeos e juntar
 
 	- partes:
-		- 1: 0   - 64
-		- 2: 65  - 122
-		- 3: 123 - 163
+		-1: 0   - 64
+		-2: 65  - 122
+		-3: 123 - 163
 
 gravar o sintático:
 	- comentar
 	- separar 3 vídeos e juntar
 
 	- partes:
-		- 1: 
-		- 2: 
-		- 3: 
-
-	- declarações.h partes:
-		- 1: 
-		- 2: 
-		- 3:
+		-1-M: declarações + ate 163
+		-2-R: 165 - 419
+		-3-S: 420 - 769
  
 
 instruções:
