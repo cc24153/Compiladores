@@ -11,20 +11,44 @@
 
 // MARIANA
 
-void erro(Analisador *an, const char *mensagem) {
+// analise sintatica é a parte do compilador que verifica se o código fonte está de acordo com a gramática da linguagem, ou seja, 
+// e se os símbolos usados estão declarados e no escopo correto, para garantir que o programa seja sintaticamente correto antes de passar para as próximas etapas do compilador
+// se a estrutura do código está correta (funcoes de compila), 
+
+// a diferenca p analex é que ele se preocupa apenas em separar os tokens, verificando se os tokens são válidos
+
+// *an sera o estado atual do analisador
+
+void erro(Analisador *an, const char *mensagem) {   // recebe an que é o anasin e a mensagem
+    // stderr é o fluxo de saída de erro, usado para imprimir mensagens de erro, para que possam ser redirecionadas para um arquivo ou para a tela, e para diferenciar das mensagens de saída normal do programa
     fprintf(stderr, "Erro sintatico na linha %d, coluna %d: %s. Token atual: \"%s\"\n",
-            an->numeroLinha, an->colunaToken, mensagem, an->palavraAtual);  // imprime a mensagem de erro com a linha, coluna e token atual para ajudar a localizar o erro no código fonte
+        an->numeroLinha, an->colunaToken, mensagem, an->palavraAtual);  // imprime a mensagem de erro com a linha, coluna e token atual para ajudar a localizar o erro no código fonte
     exit(1);
 }
-#define ERRO(msg) erro(an, msg)
+#define ERRO(msg) erro(an, msg) 
+// ERRO é um macro, ou seja, é uma substituição de texto, que chama a função erro com o analisador e a mensagem dada, 
+// para facilitar a escrita de mensagens de erro em todo o código, sem precisar passar o analisador toda vez
+// vai pegar o erro e definir ERRO sendo ele, ou seja, quando escrever ERRO("mensagem"), vai substituir por erro(an, "mensagem"), para facilitar a escrita de mensagens de erro em todo o código, sem precisar passar o analisador toda vez
 
 
 // funções auxiliares para o analisador sintático, usadas para manipular a tabela de símbolos, verificar tipos, etc:
 
+// funções para manipular o escopo, o escopo é um conceito que representa a região do código onde um identificador é válido, ou seja, onde ele pode ser usado, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto, e para garantir que um identificador seja declarado antes de ser usado no mesmo escopo
+void entraEscopo(Analisador *an) {
+    an->escopoAtual++;  // incrementa o escopo atual para entrar em um novo escopo, usado para procedimentos e funções, e para verificar se um identificador está no escopo correto
+}
+void saiEscopo(Analisador *an) {
+    for (int i = 0; i < an->totalSimbolos; i++) // desativa todos os símbolos que estão no escopo atual, ou seja, que não podem mais ser usados, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto
+        if (an->simbolos[i].escopo == an->escopoAtual)  // verifica se o símbolo está no escopo atual, ou seja, se foi declarado no escopo que está saindo
+            an->simbolos[i].ativo = 0;      // desativa o símbolo para indicar que não pode mais ser usado, ou seja, que saiu do escopo
+
+    if (an->escopoAtual > 0)    // decrementa o escopo atual para sair do escopo, garantindo que o escopo não fique negativo, e que o escopo 0 seja o escopo global onde estão os símbolos pré-definidos e os símbolos declarados no programa principal
+        an->escopoAtual--;
+}
+
 // nomeClasse: recebe uma classe de simbolo e retorna uma string com o nome da classe para imprimir na tabela de simbolos
 const char *nomeClasse(ClasseSimbolo classe){
-    switch (classe)
-    {
+    switch (classe) {
     case SIM_PROGRAMA:
         return "programa";
     case SIM_ENTRADA_SAIDA:
@@ -45,34 +69,20 @@ const char *nomeClasse(ClasseSimbolo classe){
 }
 
 // buscaSimbolo: recebe um nome e retorna o índice do símbolo na tabela de símbolos, ou -1 se não encontrar
+// usado para verificar se um identificador já foi declarado em qualquer escopo, para garantir que um identificador seja declarado antes de ser usado, e para obter informações sobre o símbolo, como tipo e classe, para verificar o uso correto do identificador no código fonte
 int buscaSimbolo(Analisador *an, const char *nome) {
     for (int i = an->totalSimbolos - 1; i >= 0; i--)    // procura de trás para frente para encontrar o símbolo mais próximo (mais recente) com o nome dado, e que esteja ativo (ainda pode ser usado)
         if (an->simbolos[i].ativo && strcmp(an->simbolos[i].nome, nome) == 0)   // verifica se o símbolo está ativo e se o nome do símbolo é igual ao nome dado, usando strcmp para comparar strings
             return i;
     return -1;
 }
-
 // buscaSimboloNoEscopoAtual: recebe um nome e retorna o índice do símbolo na tabela de símbolos que está no escopo atual, ou -1 se não encontrar
+// usado para verificar se um identificador já foi declarado no escopo atual, para evitar declarações duplicadas, e para garantir que um identificador seja declarado antes de ser usado no mesmo escopo
 int buscaSimboloNoEscopoAtual(Analisador *an, const char *nome) {
     for (int i = an->totalSimbolos - 1; i >= 0; i--)    // procura de trás para frente para encontrar o símbolo mais próximo (mais recente) com o nome dado, que esteja ativo (ainda pode ser usado) e que esteja no escopo atual
-        if (an->simbolos[i].ativo &&
-            an->simbolos[i].escopo == an->escopoAtual &&
-            strcmp(an->simbolos[i].nome, nome) == 0)
+        if (an->simbolos[i].ativo && an->simbolos[i].escopo == an->escopoAtual && strcmp(an->simbolos[i].nome, nome) == 0)
             return i;
     return -1;
-}
-
-// funções para manipular o escopo, usadas para entrar e sair de escopos em procedimentos e funções, e para verificar se um tipo é conhecido ou não
-void entraEscopo(Analisador *an) {
-    an->escopoAtual++;  // incrementa o escopo atual para entrar em um novo escopo, usado para procedimentos e funções, e para verificar se um identificador está no escopo correto
-}
-void saiEscopo(Analisador *an) {
-    for (int i = 0; i < an->totalSimbolos; i++) // desativa todos os símbolos que estão no escopo atual, ou seja, que não podem mais ser usados, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto
-        if (an->simbolos[i].escopo == an->escopoAtual)  // verifica se o símbolo está no escopo atual, ou seja, se foi declarado no escopo que está saindo
-            an->simbolos[i].ativo = 0;      // desativa o símbolo para indicar que não pode mais ser usado, ou seja, que saiu do escopo
-
-    if (an->escopoAtual > 0)    // decrementa o escopo atual para sair do escopo, garantindo que o escopo não fique negativo, e que o escopo 0 seja o escopo global onde estão os símbolos pré-definidos e os símbolos declarados no programa principal
-        an->escopoAtual--;
 }
 
 // ehTipoConhecido: recebe um nome de tipo e verifica se é um tipo pré-definido ou um tipo declarado na tabela de símbolos, retornando 1 se for conhecido e 0 se não for
@@ -87,13 +97,16 @@ int ehTipoConhecido(Analisador *an, const char *nome) {
 
     int indice = buscaSimbolo(an, nome);
     return indice >= 0 && an->simbolos[indice].classe == SIM_TIPO; // verifica se o símbolo encontrado é um tipo, ou seja, se a classe do símbolo é SIM_TIPO, para garantir que o nome dado seja um tipo conhecido e não um identificador de variável, procedimento, etc
+    // retorna 1 se o nome for um tipo pré-definido ou um tipo declarado na tabela de símbolos, 
+    // e 0 se não for, para verificar se um tipo usado no código fonte é conhecido, ou seja, se foi declarado ou é um tipo pré-definido, para garantir que o programa seja sintaticamente correto
 }
 
 // adicionaSimbolo: recebe um nome, tipo e classe, e adiciona um símbolo na tabela de símbolos, verificando se o nome já foi declarado no escopo atual e se a tabela de símbolos não está cheia
 void adicionaSimbolo(Analisador *an, const char *nome, const char *tipoNome, ClasseSimbolo classe){
-    if (buscaSimboloNoEscopoAtual(an, nome) >= 0)
+    if (buscaSimboloNoEscopoAtual(an, nome) >= 0)   // nao pode haver dois simbolos com o mesmo nome no mesmo escopo, entao verifica se o nome dado já foi declarado no escopo atual usando a função buscaSimboloNoEscopoAtual, e se encontrar um símbolo com o mesmo nome, imprime uma mensagem de erro indicando que o identificador já foi declarado, formatando a string com o nome do identificador, e encerra o programa
     {
         char msg[MAX_COMPRIMENTO * 2];  // buffer para montar a mensagem de erro,
+        // snprintf é uma função de formatação de string, que funciona como sprintf mas com um limite de tamanho para evitar overflow, usada para montar a mensagem de erro indicando que o identificador já foi declarado, formatando a string com o nome do identificador
         snprintf(msg, sizeof(msg), "identificador '%s' ja declarado", nome);    // monta a mensagem de erro indicando que o identificador já foi declarado, usando snprintf para formatar a string com o nome do identificador
         erro(an, msg);  // imprime a mensagem de erro e encerra o programa,
     }
@@ -103,27 +116,34 @@ void adicionaSimbolo(Analisador *an, const char *nome, const char *tipoNome, Cla
         erro(an, "tabela de simbolos cheia");
     }
 
-    Simbolo *simbolo = &an->simbolos[an->totalSimbolos++];      // adiciona um novo símbolo na tabela de símbolos, usando o totalSimbolos como índice para o próximo símbolo a ser adicionado, e depois incrementa o totalSimbolos para indicar que um novo símbolo foi adicionado
+    Simbolo *simbolo = &an->simbolos[an->totalSimbolos++];      // usando o totalSimbolos como índice para o próximo símbolo a ser adicionado, e depois incrementa o totalSimbolos para indicar que um novo símbolo foi adicionado
+    
     strncpy(simbolo->nome, nome, sizeof(simbolo->nome) - 1);    // copia o nome do símbolo para a struct do símbolo, limitando o tamanho para evitar overflow, e garantindo que seja uma string válida
     simbolo->nome[sizeof(simbolo->nome) - 1] = '\0';            // finaliza a string do nome do símbolo com o caractere nulo para que seja uma string válida, e para imprimir na tabela de símbolos e mensagens de erro
+    
     strncpy(simbolo->tipo, tipoNome, sizeof(simbolo->tipo) - 1);    // copia o tipo do símbolo para a struct do símbolo, limitando o tamanho para evitar overflow, e garantindo que seja uma string válida
     simbolo->tipo[sizeof(simbolo->tipo) - 1] = '\0';            // finaliza a string do tipo do símbolo com o caractere nulo para que seja uma string válida, e para imprimir na tabela de símbolos e mensagens de erro
+    
     simbolo->classe = classe;                                   // atribui a classe do símbolo para a struct do símbolo, usada para verificar se um identificador é uma variável, tipo, procedimento, etc, e para imprimir na tabela de símbolos
     simbolo->linha = an->numeroLinha;                           // armazena a linha onde o símbolo foi declarado, usando o número da linha atual do analisador léxico, para imprimir na tabela de símbolos e mensagens de erro
     simbolo->coluna = an->colunaToken;                          // armazena a coluna onde o símbolo foi declarado, usando a coluna do token atual do analisador léxico, para imprimir na tabela de símbolos e mensagens de erro
     simbolo->escopo = an->escopoAtual;                          // armazena o escopo onde o símbolo foi declarado, usando o escopo atual do analisador sintático, para verificar se um identificador está no escopo correto e para imprimir na tabela de símbolos
     simbolo->ativo = 1;                                         // marca o símbolo como ativo, ou seja, que ainda pode ser usado, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto
 }
-
 // adicionaPreDefinido: recebe um nome e uma classe, e adiciona um símbolo pré-definido na tabela de símbolos, usado para adicionar os tipos pré-definidos e os procedimentos de entrada/saída
+// ele faz isso toda vez que o programa é executado, para garantir que os símbolos pré-definidos estejam sempre na tabela de símbolos, mesmo que o programa fonte não declare nenhum tipo ou procedimento, e para garantir que sejam reconhecidos como tipos e procedimentos conhecidos durante a análise sintática
+// um simboo pre definido é um símbolo que já está na tabela de símbolos antes de começar a compilar o programa, para representar os tipos pré-definidos (integer, real, boolean, char) e os procedimentos de entrada/saída (read, write), para que possam ser usados no programa sem precisar declarar, e para garantir que sejam reconhecidos como tipos e procedimentos conhecidos durante a análise sintática
 void adicionaPreDefinido(Analisador *an, const char *nome, ClasseSimbolo classe) {
     if (an->totalSimbolos >= MAX_SIMBOLOS)  // verifica se a tabela de símbolos está cheia antes de adicionar um novo símbolo pré-definido, para evitar overflow e garantir que o programa não tente acessar índices inválidos na tabela de símbolos
         erro(an, "tabela de simbolos cheia");
 
     Simbolo *simbolo = &an->simbolos[an->totalSimbolos++];  // adiciona um novo símbolo pré-definido na tabela de símbolos, usando o totalSimbolos como índice para o próximo símbolo a ser adicionado, e depois incrementa o totalSimbolos para indicar que um novo símbolo foi adicionado
+    
     strncpy(simbolo->nome, nome, sizeof(simbolo->nome) - 1);    // copia o nome do símbolo pré-definido para a struct do símbolo, limitando o tamanho para evitar overflow, e garantindo que seja uma string válida
     simbolo->nome[sizeof(simbolo->nome) - 1] = '\0';        // finaliza a string do nome do símbolo pré-definido com o caractere nulo para que seja uma string válida, e para imprimir na tabela de símbolos e mensagens de erro
+    
     strcpy(simbolo->tipo, "-");                             // os símbolos pré-definidos não têm um tipo específico, então atribui "-" para indicar que o tipo é desconhecido ou não aplicável, usado para imprimir na tabela de símbolos e mensagens de erro
+    
     simbolo->classe = classe;                               // atribui a classe do símbolo pré-definido para a struct do símbolo, usada para verificar se um identificador é uma variável, tipo, procedimento, etc, e para imprimir na tabela de símbolos
     simbolo->linha = 0;                                     // os símbolos pré-definidos não têm uma linha específica onde foram declarados, então atribui 0 para indicar que a linha é desconhecida ou não aplicável, usado para imprimir na tabela de símbolos e mensagens de erro
     simbolo->coluna = 0;                                    // os símbolos pré-definidos não têm uma coluna específica onde foram declarados, então atribui 0 para indicar que a coluna é desconhecida ou não aplicável, usado para imprimir na tabela de símbolos e mensagens de erro
@@ -132,9 +152,10 @@ void adicionaPreDefinido(Analisador *an, const char *nome, ClasseSimbolo classe)
 }
 
 // exigeDeclarado: recebe um nome e verifica se está declarado na tabela de símbolos, se não estiver, imprime uma mensagem de erro e encerra o programa
+// exigir que o simbolo esteja declarado
 void exigeDeclarado(Analisador *an, const char *nome){
-    if (buscaSimbolo(an, nome) < 0) // se a função buscaSimbolo retornar um índice menor que 0, 
-    // significa que o nome dado não foi encontrado na tabela de símbolos, 
+    // se nao ta na tabela de simbolos, entao o identificador nao foi declarado, entao imprime uma mensagem de erro indicando que o identificador não foi declarado, formatando a string com o nome do identificador, e encerra o programa
+    if (buscaSimbolo(an, nome) < 0) // se a função buscaSimbolo retornar um índice menor que 0, significa que o nome dado não foi encontrado na tabela de símbolos, 
     {
         // monta uma mensagem de erro indicando que o identificador não foi declarado,
         char msg[MAX_COMPRIMENTO * 2];
@@ -153,11 +174,11 @@ void imprimeTabelaSimbolos(Analisador *an) {
     for (int i = 0; i < an->totalSimbolos; i++)
     {
         printf("%-20s %-15s %-15s %-8d %-8d\n",
-               an->simbolos[i].nome,
-               nomeClasse(an->simbolos[i].classe),
-               an->simbolos[i].tipo[0] ? an->simbolos[i].tipo : "-",
-               an->simbolos[i].linha,
-               an->simbolos[i].escopo);
+            an->simbolos[i].nome,
+            nomeClasse(an->simbolos[i].classe),
+            an->simbolos[i].tipo[0] ? an->simbolos[i].tipo : "-",
+            an->simbolos[i].linha,
+            an->simbolos[i].escopo);
     }
 }
 

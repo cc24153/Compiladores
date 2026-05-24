@@ -1,10 +1,13 @@
-#ifndef DECLARACOES_H
-#define DECLARACOES_H
+#ifndef DECLARACOES_H   // faz com que o conteúdo do arquivo seja incluído apenas uma vez durante a compilacao
+#define DECLARACOES_H   // bandeira/carimbo que define que o arquivo já foi incluído
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+
+// arquivo declaracoes serve para declarar coisas usadas no analisador léxico e sintático,
+// para evitar dependências circulares entre os arquivos anasin.c e analisador.c, e para organizar melhor o código
 
 // Mariana Marietti da Costa - 24140
 // Rafaelly Maria Nascimento da Silva - 24153
@@ -14,11 +17,12 @@
 #define MAX_COMPRIMENTO 256 // tamanho maximo de uma linha, palavra ou token (número de bits que um token pode ocupar)
 #define NUM_PALAVRAS 36 // número de palavras reservadas, usado para comparar o token separado com as palavras reservadas
 
-#define MAX_SIMBOLOS 512        // tamanho maximo da tabela de simbolos, ou seja, o numero maximo de simbolos que podem ser declarados no programa, usado para verificar se a tabela de simbolos está cheia
+#define MAX_SIMBOLOS 512        // tamanho maximo da tabela de simbolos, usado para verificar se a tabela de simbolos está cheia
 #define MAX_LISTA_IDS 128       // tamanho maximo de identificadores em uma mesma declaracao, usado para verificar se tem muitos identificadores na mesma declaracao
 
 
 // enum de tokens, cada token tem um numero inteiro correspondente, usado para comparar o token separado com as palavras reservadas e simbolos
+// programa tem o token 0
 typedef enum {
     programa, rotulo, tipo, variavel, procedimento, funcao,
     inicio, fim, atribuicao, se, entao, senao, enquanto, faca,
@@ -49,12 +53,12 @@ typedef struct {
     ClasseSimbolo classe;       // classe do simbolo, usado para verificar se um identificador é uma variavel, tipo, procedimento, etc
     int linha;                  // linha onde o simbolo foi declarado, usado para imprimir na tabela de simbolos
     int coluna;                 // coluna onde o simbolo foi declarado, usado para imprimir na tabela de simbolos
-    int escopo;                 // escopo onde o simbolo foi declarado, usado para verificar se um identificador está no escopo correto
+    int escopo;                 // escopo onde o simbolo foi declarado, usado para verificar se um identificador está no escopo correto, escopo é um numero inteiro que começa em 0 para o escopo global, e é incrementado para cada novo escopo (procedimento ou função) e decrementado ao sair do escopo
     int ativo;                  // indica se o simbolo está ativo (ainda pode ser usado) ou não (já saiu do escopo)
 } Simbolo;
 
 
-// struct de analisador léxico, usado para ler o arquivo de entrada, armazenar a linha atual, posição atual, buffer do token separado, 
+// struct de analisador, usado para ler o arquivo de entrada, armazenar a linha atual, posição atual, buffer do token separado, 
 // palavra atual (string do token separado), tabela de simbolos, total de simbolos e escopo atual
 typedef struct {
     FILE *arquivo;                  // o arquivo aberto, usado para ler o código fonte
@@ -69,16 +73,18 @@ typedef struct {
     int escopoAtual;                // escopo atual, usado para verificar se um identificador está no escopo correto e para imprimir na tabela de simbolos
 } Analisador;
 
+
+// como se fosse uma interface: sao assinaturas de funcoes usadas tanto no analisador lexico quanto no sintatico, 
+// para evitar dependencias circulares entre os arquivos anasin.c e analisador.c, e para organizar melhor o codigo
+
 // função de erro, usada para imprimir mensagens de erro sintático com a linha, coluna e token atual, e para encerrar o programa
 void erro(Analisador *an, const char *mensagem);
 
-// funcoes do compilador lexico
 //funciona como uma interface, o analisador lexico chama as funcoes abaixo para separar o token, comparar com as palavras reservadas e passar a string do token para o analisador sintático
 char *separaToken(Analisador *analisa);
 token proximoToken(Analisador *analisa);
 
-// funces do compilador sintático
-// como se fosse uma interface 
+// funces do compilador sintático 
 void compila_programa(Analisador *an);
 void compila_bloco(Analisador *an);
 void compila_parametros_formais(Analisador *an);
@@ -90,4 +96,4 @@ void compila_termo(Analisador *an, token *t);
 void compila_fator(Analisador *an, token *t);
 
 
-#endif
+#endif // fim do arquivo declaracoes.h

@@ -11,9 +11,9 @@ gravar o sintático:
 	- separar 3 vídeos e juntar
 
 	- partes:
-		-1-M: declarações + ate 163
-		-2-R: 165 - 419
-		-3-S: 420 - 769
+		-1-M: declarações + ate 185
+		-2-R: 186 - 440
+		-3-S: 441 - 790
  
 
 instruções:
