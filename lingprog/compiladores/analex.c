@@ -148,7 +148,7 @@ int main(void) {
     an.linha[0] = '\0';     // inicializa a palavra atual com string vazia
 
     // abre o arquivo para leitura
-    an.arquivo = fopen("exemplo.txt", "r");
+    an.arquivo = fopen("progtexte.txt", "r");
     if (!an.arquivo) {
         printf("Erro ao abrir arquivo\n");
         return 1;

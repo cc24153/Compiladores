@@ -998,7 +998,7 @@ static void compila_fator(Analisador *an, token *t)
 
 int main(int argc, char **argv)
 {
-    const char *nomeArquivo = argc > 1 ? argv[1] : "exemplo.txt";
+    const char *nomeArquivo = argc > 1 ? argv[1] : "progtexte.txt";
     Analisador an;
     memset(&an, 0, sizeof(an));
     adicionaPreDefinido(&an, "read", SIM_PROCEDIMENTO);
