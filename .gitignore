@@ -11,5 +11,6 @@ programa
 # Arquivos de Log e Temporários
 *.log
 .DS_Store
+.DS_Store/
 *.dSYM/
 Thumbs.db
