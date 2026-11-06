@@ -2,7 +2,56 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include "declaracoes.h"
+
+static void gera(Analisador *an, const char *fmt, ...) {
+    if (!an->saida) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(an->saida, fmt, ap);
+    va_end(ap);
+}
+
+static int novoRotulo(Analisador *an) { return ++an->proximoRotulo; }
+static int nivelAcesso(Analisador *an, Simbolo *s) { (void)an; return s->escopo; }
+static int buscaRotina(Analisador *an, const char *nome, ClasseSimbolo classe) {
+    for (int i = an->totalSimbolos - 1; i >= 0; --i)
+        if (an->simbolos[i].ativo && an->simbolos[i].classe == classe && strcmp(an->simbolos[i].nome, nome) == 0)
+            return i;
+    return -1;
+}
+int buscaSimbolo(Analisador *an, const char *nome);
+
+static void tipoBase(Analisador *an, const char *tipo, char *saida) {
+    strncpy(saida, tipo, MAX_COMPRIMENTO - 1); saida[MAX_COMPRIMENTO - 1] = '\0';
+    for (int passo = 0; passo < 16; ++passo) {
+        int i = buscaSimbolo(an, saida);
+        if (i < 0 || an->simbolos[i].classe != SIM_TIPO) break;
+        strncpy(saida, an->simbolos[i].tipo, MAX_COMPRIMENTO - 1); saida[MAX_COMPRIMENTO - 1] = '\0';
+    }
+}
+static int tipoNumerico(Analisador *an, const char *tipo) {
+    char base[MAX_COMPRIMENTO]; tipoBase(an, tipo, base);
+    return strcmp(base, "integer") == 0 || strcmp(base, "real") == 0;
+}
+static int tipoCompativel(Analisador *an, const char *a, const char *b) {
+    char baseA[MAX_COMPRIMENTO], baseB[MAX_COMPRIMENTO]; tipoBase(an, a, baseA); tipoBase(an, b, baseB);
+    return strcmp(baseA, baseB) == 0 || (tipoNumerico(an, baseA) && tipoNumerico(an, baseB));
+}
+static void exigeTipo(Analisador *an, int condicao, const char *mensagem) { if (!condicao) erro(an, mensagem); }
+
+static void emiteOperador(Analisador *an, token op) {
+    switch (op) {
+    case mais: gera(an,"SOMA\n"); break; case menos: gera(an,"SUBT\n"); break;
+    case vezes: gera(an,"MULT\n"); break; case dividir: gera(an,"DIVI\n"); break;
+    case e: gera(an,"CONJ\n"); break; case ou: gera(an,"DISJ\n"); break;
+    case igual: gera(an,"CMIG\n"); break; case diferente: gera(an,"CMDG\n"); break;
+    case menor: gera(an,"CMME\n"); break; case menorouigual: gera(an,"CMEG\n"); break;
+    case maior: gera(an,"CMMA\n"); break; case maiorouigual: gera(an,"CMAG\n"); break;
+    default: break;
+    }
+}
 
 // Mariana Marietti da Costa - 24140
 // Rafaelly Maria Nascimento da Silva - 24153
@@ -35,7 +84,9 @@ void erro(Analisador *an, const char *mensagem) {   // recebe an que é o anasin
 
 // funções para manipular o escopo, o escopo é um conceito que representa a região do código onde um identificador é válido, ou seja, onde ele pode ser usado, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto, e para garantir que um identificador seja declarado antes de ser usado no mesmo escopo
 void entraEscopo(Analisador *an) {
-    an->escopoAtual++;  // incrementa o escopo atual para entrar em um novo escopo, usado para procedimentos e funções, e para verificar se um identificador está no escopo correto
+    if (an->escopoAtual >= 62) erro(an, "limite de escopos excedido");
+    an->escopoAtual++;
+    an->deslocamentoPorEscopo[an->escopoAtual] = 0;  // incrementa o escopo atual para entrar em um novo escopo, usado para procedimentos e funções, e para verificar se um identificador está no escopo correto
 }
 void saiEscopo(Analisador *an) {
     for (int i = 0; i < an->totalSimbolos; i++) // desativa todos os símbolos que estão no escopo atual, ou seja, que não podem mais ser usados, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto
@@ -63,6 +114,8 @@ const char *nomeClasse(ClasseSimbolo classe){
         return "funcao";
     case SIM_PARAMETRO:
         return "parametro";
+    case SIM_ROTULO:
+        return "rotulo";
     default:
         return "desconhecido";
     }
@@ -128,7 +181,12 @@ void adicionaSimbolo(Analisador *an, const char *nome, const char *tipoNome, Cla
     simbolo->linha = an->numeroLinha;                           // armazena a linha onde o símbolo foi declarado, usando o número da linha atual do analisador léxico, para imprimir na tabela de símbolos e mensagens de erro
     simbolo->coluna = an->colunaToken;                          // armazena a coluna onde o símbolo foi declarado, usando a coluna do token atual do analisador léxico, para imprimir na tabela de símbolos e mensagens de erro
     simbolo->escopo = an->escopoAtual;                          // armazena o escopo onde o símbolo foi declarado, usando o escopo atual do analisador sintático, para verificar se um identificador está no escopo correto e para imprimir na tabela de símbolos
-    simbolo->ativo = 1;                                         // marca o símbolo como ativo, ou seja, que ainda pode ser usado, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto
+    simbolo->ativo = 1;
+    simbolo->deslocamento = (classe == SIM_VARIAVEL || classe == SIM_PARAMETRO) ? an->deslocamentoPorEscopo[an->escopoAtual]++ : -1;
+    simbolo->rotuloCodigo = (classe == SIM_ROTULO || classe == SIM_PROCEDIMENTO || classe == SIM_FUNCAO) ? novoRotulo(an) : -1;
+    simbolo->quantidadeParametros = 0;
+    simbolo->referencia = 0;
+    simbolo->donoEscopo = an->escopoAtual > 0 ? an->simboloRotinaPorEscopo[an->escopoAtual] : -1;                                         // marca o símbolo como ativo, ou seja, que ainda pode ser usado, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto
 }
 // adicionaPreDefinido: recebe um nome e uma classe, e adiciona um símbolo pré-definido na tabela de símbolos, usado para adicionar os tipos pré-definidos e os procedimentos de entrada/saída
 // ele faz isso toda vez que o programa é executado, para garantir que os símbolos pré-definidos estejam sempre na tabela de símbolos, mesmo que o programa fonte não declare nenhum tipo ou procedimento, e para garantir que sejam reconhecidos como tipos e procedimentos conhecidos durante a análise sintática
@@ -224,6 +282,8 @@ void compila_programa(Analisador *an) {
         ERRO("esperava ';' apos cabecalho do programa");
     }
     
+    gera(an, "INPP\n");
+    an->rotuloPrincipal = novoRotulo(an);
     compila_bloco(an);  // chama a função para compilar o bloco do programa, que é a parte principal do programa onde estão as declarações e os comandos
 
     // verifica se o próximo token é um ponto, indicando o final do programa, se não for, imprime uma mensagem de erro indicando que esperava '.' ao final do programa, e encerra o programa
@@ -237,6 +297,11 @@ void compila_programa(Analisador *an) {
     if (t != fimdearquivo){
         ERRO("conteudo inesperado apos '.'");
     }
+    int variaveisGlobais = 0;
+    for (int i = 0; i < an->totalSimbolos; ++i)
+        if (an->simbolos[i].escopo == 0 && an->simbolos[i].classe == SIM_VARIAVEL) variaveisGlobais++;
+    if (variaveisGlobais) gera(an, "DMEM %d\n", variaveisGlobais);
+    gera(an, "PARA\n");
 
     printf("Programa sintaticamente correto!\n");
 }
@@ -252,14 +317,13 @@ void compila_bloco(Analisador *an) {
         if (t != numero)
             ERRO("esperava numero apos 'label'");
 
-        t = proximoToken(an);
-        while (t == virgula)
-        {
+        do {
+            if (t != numero) ERRO("esperava numero em 'label'");
+            adicionaSimbolo(an, an->palavraAtual, "-", SIM_ROTULO);
             t = proximoToken(an);
-            if (t != numero)
-                ERRO("esperava numero apos ',' em 'label'");
+            if (t != virgula) break;
             t = proximoToken(an);
-        }
+        } while (1);
 
         if (t != pontoevirgula)
             ERRO("esperava ';' ao final da secao 'label'");
@@ -330,6 +394,7 @@ void compila_bloco(Analisador *an) {
             strcpy(tipoVar, an->palavraAtual);
             for (int i = 0; i < totalIds; i++)
                 adicionaSimbolo(an, ids[i], tipoVar, SIM_VARIAVEL);
+            if (an->escopoAtual == 0) gera(an, "AMEM %d\n", totalIds);
 
             t = proximoToken(an);
             if (t != pontoevirgula)
@@ -339,6 +404,11 @@ void compila_bloco(Analisador *an) {
         }
     }
 
+    if (an->escopoAtual == 0)
+        gera(an, "DSVS L%d\n", an->rotuloPrincipal);
+    else
+        gera(an, "DSVS L%d\n", an->rotuloCorpoPorEscopo[an->escopoAtual]);
+
     while (t == procedimento || t == funcao)
     {
         if (t == procedimento)
@@ -346,8 +416,15 @@ void compila_bloco(Analisador *an) {
             t = proximoToken(an);
             if (t != identificador)
                 ERRO("esperava identificador apos 'procedure'");
-            adicionaSimbolo(an, an->palavraAtual, "-", SIM_PROCEDIMENTO);
+            char nomeProc[MAX_COMPRIMENTO];
+            strcpy(nomeProc, an->palavraAtual);
+            adicionaSimbolo(an, nomeProc, "-", SIM_PROCEDIMENTO);
+            int idxProc = buscaSimbolo(an, nomeProc);
             entraEscopo(an);
+            int corpoProc = novoRotulo(an);
+            an->rotuloCorpoPorEscopo[an->escopoAtual] = corpoProc;
+            an->simboloRotinaPorEscopo[an->escopoAtual] = idxProc;
+            gera(an, "L%d: NADA\nENPR %d\n", an->simbolos[idxProc].rotuloCodigo, an->escopoAtual);
 
             t = proximoToken(an);
             if (t == abreparenteses)
@@ -359,7 +436,13 @@ void compila_bloco(Analisador *an) {
             if (t != pontoevirgula)
                 ERRO("esperava ';' apos cabecalho de 'procedure'");
 
+            int escopoProc = an->escopoAtual;
             compila_bloco(an);
+            int locaisProc = 0;
+            for (int si = 0; si < an->totalSimbolos; ++si)
+                if (an->simbolos[si].ativo && an->simbolos[si].escopo == escopoProc && an->simbolos[si].classe == SIM_VARIAVEL) locaisProc++;
+            if (locaisProc) gera(an, "DMEM %d\n", locaisProc);
+            gera(an, "RTPR %d, %d\n", escopoProc, an->simbolos[idxProc].quantidadeParametros);
             saiEscopo(an);
 
             t = proximoToken(an);
@@ -378,6 +461,11 @@ void compila_bloco(Analisador *an) {
             adicionaSimbolo(an, nomeFuncao, "-", SIM_FUNCAO);
             int indiceFuncao = buscaSimbolo(an, nomeFuncao);
             entraEscopo(an);
+            int escopoFunc = an->escopoAtual;
+            int corpoFunc = novoRotulo(an);
+            an->rotuloCorpoPorEscopo[escopoFunc] = corpoFunc;
+            an->simboloRotinaPorEscopo[escopoFunc] = indiceFuncao;
+            gera(an, "L%d: NADA\nENPR %d\n", an->simbolos[indiceFuncao].rotuloCodigo, escopoFunc);
 
             t = proximoToken(an);
             if (t == abreparenteses)
@@ -397,11 +485,22 @@ void compila_bloco(Analisador *an) {
             strncpy(an->simbolos[indiceFuncao].tipo, an->palavraAtual, sizeof(an->simbolos[indiceFuncao].tipo) - 1);
             an->simbolos[indiceFuncao].tipo[sizeof(an->simbolos[indiceFuncao].tipo) - 1] = '\0';
 
+            char tipoRetorno[MAX_COMPRIMENTO];
+            strcpy(tipoRetorno, an->simbolos[indiceFuncao].tipo);
+            adicionaSimbolo(an, nomeFuncao, tipoRetorno, SIM_VARIAVEL);
+            int resultadoFuncao = buscaSimboloNoEscopoAtual(an, nomeFuncao);
             t = proximoToken(an);
             if (t != pontoevirgula)
                 ERRO("esperava ';' apos cabecalho de 'function'");
 
             compila_bloco(an);
+            int parametrosFunc = an->simbolos[indiceFuncao].quantidadeParametros;
+            an->simbolos[resultadoFuncao].deslocamento = -(parametrosFunc + 3);
+            int locaisFunc = 0;
+            for (int si = 0; si < an->totalSimbolos; ++si)
+                if (an->simbolos[si].ativo && an->simbolos[si].escopo == escopoFunc && an->simbolos[si].classe == SIM_VARIAVEL && an->simbolos[si].deslocamento >= 0) locaisFunc++;
+            if (locaisFunc) gera(an, "DMEM %d\n", locaisFunc);
+            gera(an, "RTPR %d, %d\n", escopoFunc, parametrosFunc);
             saiEscopo(an);
 
             t = proximoToken(an);
@@ -415,6 +514,8 @@ void compila_bloco(Analisador *an) {
     if (t != inicio)
         ERRO("esperava 'begin'");
 
+    if (an->escopoAtual == 0) gera(an, "L%d: NADA\n", an->rotuloPrincipal);
+    else gera(an, "L%d: NADA\n", an->rotuloCorpoPorEscopo[an->escopoAtual]);
     t = proximoToken(an);
     while (t != fim)
     {
@@ -436,6 +537,8 @@ void registraListaParametros(Analisador *an, char ids[][MAX_COMPRIMENTO], int to
 
     for (int i = 0; i < totalIds; i++)
         adicionaSimbolo(an, ids[i], tipoParam, SIM_PARAMETRO);
+    if (an->escopoAtual > 0)
+        an->simbolos[an->simboloRotinaPorEscopo[an->escopoAtual]].quantidadeParametros += totalIds;
 }
 
 // SAMUEL
@@ -447,7 +550,8 @@ void compila_parametros_formais(Analisador *an) {
     {
         t = proximoToken(an);
 
-        if (t == variavel)
+        int porReferencia = (t == variavel);
+        if (porReferencia)
             t = proximoToken(an);
 
         if (t == identificador)
@@ -477,6 +581,10 @@ void compila_parametros_formais(Analisador *an) {
             if (t != identificador)
                 ERRO("esperava tipo em parametros formais");
             registraListaParametros(an, ids, totalIds, an->palavraAtual);
+            for (int i = 0; i < totalIds; ++i) {
+                int p = buscaSimboloNoEscopoAtual(an, ids[i]);
+                an->simbolos[p].referencia = porReferencia;
+            }
 
             t = proximoToken(an);
         }
@@ -553,14 +661,61 @@ void compila_parametros_formais(Analisador *an) {
 
     if (t != fechaparenteses)
         ERRO("esperava ')' ao final dos parametros formais");
+    int rotina = an->simboloRotinaPorEscopo[an->escopoAtual];
+    int total = an->simbolos[rotina].quantidadeParametros;
+    int ordinal = 0;
+    for (int i = 0; i < an->totalSimbolos; ++i) {
+        Simbolo *p = &an->simbolos[i];
+        if (p->donoEscopo == rotina && p->classe == SIM_PARAMETRO) {
+            p->deslocamento = ordinal - total - 2;
+            ordinal++;
+        }
+    }
+    an->simbolos[rotina].quantidadeParametros = ordinal;
+}
+
+static void compilaArgumentos(Analisador *an, token *t, int rotina) {
+    int ordinal = 0;
+    while (*t != fechaparenteses) {
+        int indiceParametro = -1;
+        int visto = 0;
+        for (int i = 0; i < an->totalSimbolos; ++i)
+            if (an->simbolos[i].donoEscopo == rotina && an->simbolos[i].classe == SIM_PARAMETRO) {
+                if (visto++ == ordinal) { indiceParametro = i; break; }
+            }
+        if (indiceParametro < 0) erro(an, "quantidade de argumentos excede os parametros");
+        if (an->simbolos[indiceParametro].referencia) {
+            if (*t != identificador) erro(an, "parametro var requer uma variavel");
+            int atual = buscaSimbolo(an, an->palavraAtual);
+            if (atual < 0 || an->simbolos[atual].deslocamento == -1 ||
+                (an->simbolos[atual].classe != SIM_VARIAVEL && an->simbolos[atual].classe != SIM_PARAMETRO)) erro(an, "argumento var invalido");
+            if (!tipoCompativel(an, an->simbolos[atual].tipo, an->simbolos[indiceParametro].tipo)) erro(an, "tipo incompativel em argumento var");
+            if (an->simbolos[atual].referencia)
+                gera(an, "CRVL %d, %d\n", nivelAcesso(an, &an->simbolos[atual]), an->simbolos[atual].deslocamento);
+            else
+                gera(an, "CREN %d, %d\n", nivelAcesso(an, &an->simbolos[atual]), an->simbolos[atual].deslocamento);
+            *t = proximoToken(an);
+        } else {
+            compila_expressao(an, t);
+            if (!tipoCompativel(an, an->tipoExpressao, an->simbolos[indiceParametro].tipo)) erro(an, "tipo incompativel em argumento");
+        }
+        ordinal++;
+        if (*t == virgula) *t = proximoToken(an);
+        else break;
+    }
+    int esperados = an->simbolos[rotina].quantidadeParametros;
+    if (ordinal != esperados) erro(an, "quantidade de argumentos diferente da declaracao");
 }
 
 void compila_comando(Analisador *an, token *t) {
     while (*t == numero)
     {
+        char rotulo[MAX_COMPRIMENTO]; strcpy(rotulo, an->palavraAtual);
+        int idx = buscaSimbolo(an, rotulo);
+        if (idx < 0 || an->simbolos[idx].classe != SIM_ROTULO) ERRO("rotulo usado nao foi declarado");
+        gera(an, "L%d: NADA\n", an->simbolos[idx].rotuloCodigo);
         *t = proximoToken(an);
-        if (*t != doispontos)
-            ERRO("esperava ':' apos rotulo numerico");
+        if (*t != doispontos) ERRO("esperava ':' apos rotulo numerico");
         *t = proximoToken(an);
     }
 
@@ -573,7 +728,10 @@ void compila_comando_sem_rotulo(Analisador *an, token *t) {
         char nome[MAX_COMPRIMENTO];
         strcpy(nome, an->palavraAtual);
         exigeDeclarado(an, nome);
-
+        int indiceIdentificador = buscaSimbolo(an, nome);
+        if (indiceIdentificador >= 0 && an->simbolos[indiceIdentificador].classe != SIM_VARIAVEL &&
+            an->simbolos[indiceIdentificador].classe != SIM_PARAMETRO && an->simbolos[indiceIdentificador].classe != SIM_FUNCAO)
+            erro(an, "identificador nao pode receber atribuicao nem ser chamado como comando");
         *t = proximoToken(an);
 
         if (*t == abrecolchetes)
@@ -587,34 +745,79 @@ void compila_comando_sem_rotulo(Analisador *an, token *t) {
             }
             if (*t != fechacolchetes)
                 ERRO("esperava ']' apos indice de array");
-            *t = proximoToken(an);
+            erro(an, "arrays nao sao suportados pela linguagem deste compilador");
         }
 
         if (*t == atribuicao)
         {
             *t = proximoToken(an);
             compila_expressao(an, t);
+            int indiceDestino = buscaSimbolo(an, nome);
+            if (indiceDestino >= 0 && !tipoCompativel(an, an->simbolos[indiceDestino].tipo, an->tipoExpressao))
+                erro(an, "tipos incompativeis na atribuicao");
+            if (indiceDestino >= 0 && an->simbolos[indiceDestino].deslocamento != -1) {
+                if (an->simbolos[indiceDestino].referencia)
+                    gera(an, "ARMI %d, %d\n", nivelAcesso(an, &an->simbolos[indiceDestino]), an->simbolos[indiceDestino].deslocamento);
+                else
+                    gera(an, "ARMZ %d, %d\n", nivelAcesso(an, &an->simbolos[indiceDestino]), an->simbolos[indiceDestino].deslocamento);
+            }
         }
         else if (*t == abreparenteses)
         {
+            int ehRead = strcmp(nome, "read") == 0;
+            int ehWrite = strcmp(nome, "write") == 0;
             *t = proximoToken(an);
             if (*t != fechaparenteses)
             {
-                compila_expressao(an, t);
-                while (*t == virgula)
-                {
-                    *t = proximoToken(an);
+                if (ehRead) {
+                    do {
+                        if (*t != identificador) ERRO("read espera identificadores");
+                        char destino[MAX_COMPRIMENTO];
+                        strcpy(destino, an->palavraAtual);
+                        exigeDeclarado(an, destino);
+                        int idx = buscaSimbolo(an, destino);
+                        gera(an, "LEIT\n");
+                        if (idx >= 0 && an->simbolos[idx].deslocamento != -1) {
+                            if (an->simbolos[idx].referencia)
+                                gera(an, "ARMI %d, %d\n", nivelAcesso(an, &an->simbolos[idx]), an->simbolos[idx].deslocamento);
+                            else
+                                gera(an, "ARMZ %d, %d\n", nivelAcesso(an, &an->simbolos[idx]), an->simbolos[idx].deslocamento);
+                        }
+                        *t = proximoToken(an);
+                        if (*t == virgula) *t = proximoToken(an); else break;
+                    } while (1);
+                } else if (ehWrite) {
                     compila_expressao(an, t);
+                    gera(an, "IMPR\n");
+                    while (*t == virgula) {
+                        *t = proximoToken(an);
+                        compila_expressao(an, t);
+                        gera(an, "IMPR\n");
+                    }
+                } else {
+                    int chamada = buscaSimbolo(an, nome);
+                    if (chamada < 0 || an->simbolos[chamada].classe != SIM_PROCEDIMENTO || chamada <= 1)
+                        erro(an, "chamada de procedimento invalida");
+                    compilaArgumentos(an, t, chamada);
                 }
             }
 
             if (*t != fechaparenteses)
                 ERRO("esperava ')' ao final da chamada de procedimento");
+            if (!ehRead && !ehWrite) {
+                int chamada = buscaSimbolo(an, nome);
+                if (chamada >= 0 && (an->simbolos[chamada].classe == SIM_PROCEDIMENTO || an->simbolos[chamada].classe == SIM_FUNCAO))
+                    gera(an, "CHPR L%d\n", an->simbolos[chamada].rotuloCodigo);
+            }
             *t = proximoToken(an);
         }
         else
         {
-            /* chamada de procedure sem parametros, como: r */
+            int idxChamada = buscaSimbolo(an, nome);
+            if (idxChamada >= 0 && an->simbolos[idxChamada].classe == SIM_PROCEDIMENTO && idxChamada > 1) {
+                if (an->simbolos[idxChamada].quantidadeParametros != 0) erro(an, "rotina exige argumentos");
+                gera(an, "CHPR L%d\n", an->simbolos[idxChamada].rotuloCodigo);
+            }
         }
     }
     else if (*t == vapara)
@@ -622,6 +825,12 @@ void compila_comando_sem_rotulo(Analisador *an, token *t) {
         *t = proximoToken(an);
         if (*t != numero)
             ERRO("esperava numero apos 'goto'");
+        int idxRotulo = buscaSimbolo(an, an->palavraAtual);
+        if (idxRotulo < 0 || an->simbolos[idxRotulo].classe != SIM_ROTULO) ERRO("rotulo usado nao foi declarado");
+        if (an->simbolos[idxRotulo].escopo == an->escopoAtual)
+            gera(an, "DSVS L%d\n", an->simbolos[idxRotulo].rotuloCodigo);
+        else
+            gera(an, "DSVR L%d, %d, %d\n", an->simbolos[idxRotulo].rotuloCodigo, an->simbolos[idxRotulo].escopo, an->escopoAtual);
         *t = proximoToken(an);
     }
     else if (*t == inicio)
@@ -641,31 +850,41 @@ void compila_comando_sem_rotulo(Analisador *an, token *t) {
     }
     else if (*t == se)
     {
+        int rotuloSenao = novoRotulo(an), rotuloFim = novoRotulo(an);
         *t = proximoToken(an);
         compila_expressao(an, t);
+        exigeTipo(an, tipoCompativel(an, an->tipoExpressao, "boolean"), "condicao do if deve ser boolean");
 
         if (*t != entao)
             ERRO("esperava 'then' apos condicao do 'if'");
 
+        gera(an, "DSVF L%d\n", rotuloSenao);
         *t = proximoToken(an);
         compila_comando_sem_rotulo(an, t);
 
         if (*t == senao)
         {
+            gera(an, "DSVS L%d\nL%d: NADA\n", rotuloFim, rotuloSenao);
             *t = proximoToken(an);
             compila_comando_sem_rotulo(an, t);
-        }
+            gera(an, "L%d: NADA\n", rotuloFim);
+        } else { gera(an, "L%d: NADA\n", rotuloSenao); }
     }
     else if (*t == enquanto)
     {
+        int rotuloInicio = novoRotulo(an), rotuloFim = novoRotulo(an);
+        gera(an, "L%d: NADA\n", rotuloInicio);
         *t = proximoToken(an);
         compila_expressao(an, t);
+        exigeTipo(an, tipoCompativel(an, an->tipoExpressao, "boolean"), "condicao do while deve ser boolean");
 
         if (*t != faca)
             ERRO("esperava 'do' apos condicao do 'while'");
 
+        gera(an, "DSVF L%d\n", rotuloFim);
         *t = proximoToken(an);
         compila_comando_sem_rotulo(an, t);
+        gera(an, "DSVS L%d\nL%d: NADA\n", rotuloInicio, rotuloFim);
     }
 }
 void compila_expressao(Analisador *an, token *t) {
@@ -675,20 +894,39 @@ void compila_expressao(Analisador *an, token *t) {
         *t == menor || *t == menorouigual ||
         *t == maior || *t == maiorouigual)
     {
+        token op = *t;
         *t = proximoToken(an);
+        char esquerda[MAX_COMPRIMENTO]; strcpy(esquerda, an->tipoExpressao);
         compila_expressao_simples(an, t);
+        if (op == menor || op == menorouigual || op == maior || op == maiorouigual)
+            exigeTipo(an, tipoNumerico(an, esquerda) && tipoNumerico(an, an->tipoExpressao), "comparacao ordenada exige operandos numericos");
+        else
+            exigeTipo(an, tipoCompativel(an, esquerda, an->tipoExpressao), "tipos incompativeis na comparacao");
+        emiteOperador(an, op);
+        strcpy(an->tipoExpressao, "boolean");
     }
 }
 void compila_expressao_simples(Analisador *an, token *t) {
-    if (*t == mais || *t == menos)
-        *t = proximoToken(an);
+    token sinal = token_invalido;
+    if (*t == mais || *t == menos) { sinal = *t; *t = proximoToken(an); }
 
     compila_termo(an, t);
+    if (sinal != token_invalido) { exigeTipo(an, tipoNumerico(an, an->tipoExpressao), "sinal unario exige tipo numerico"); if (sinal == menos) gera(an, "INVR\n"); }
 
     while (*t == mais || *t == menos || *t == ou)
     {
+        token op = *t;
+        char esquerda[MAX_COMPRIMENTO]; strcpy(esquerda, an->tipoExpressao);
         *t = proximoToken(an);
         compila_termo(an, t);
+        if (op == ou) {
+            exigeTipo(an, tipoCompativel(an, esquerda, "boolean") && tipoCompativel(an, an->tipoExpressao, "boolean"), "operador 'or' exige operandos boolean");
+            strcpy(an->tipoExpressao, "boolean");
+        } else {
+            exigeTipo(an, tipoNumerico(an, esquerda) && tipoNumerico(an, an->tipoExpressao), "operador aritmetico exige operandos numericos");
+            if (tipoCompativel(an, esquerda, "real") || tipoCompativel(an, an->tipoExpressao, "real")) strcpy(an->tipoExpressao, "real");
+        }
+        emiteOperador(an, op);
     }
 }
 void compila_termo(Analisador *an, token *t) {
@@ -696,8 +934,18 @@ void compila_termo(Analisador *an, token *t) {
 
     while (*t == vezes || *t == dividir || *t == e)
     {
+        token op = *t;
+        char esquerda[MAX_COMPRIMENTO]; strcpy(esquerda, an->tipoExpressao);
         *t = proximoToken(an);
         compila_fator(an, t);
+        if (op == e) {
+            exigeTipo(an, tipoCompativel(an, esquerda, "boolean") && tipoCompativel(an, an->tipoExpressao, "boolean"), "operador 'and' exige operandos boolean");
+            strcpy(an->tipoExpressao, "boolean");
+        } else {
+            exigeTipo(an, tipoNumerico(an, esquerda) && tipoNumerico(an, an->tipoExpressao), "operador aritmetico exige operandos numericos");
+            if (tipoCompativel(an, esquerda, "real") || tipoCompativel(an, an->tipoExpressao, "real")) strcpy(an->tipoExpressao, "real");
+        }
+        emiteOperador(an, op);
     }
 }
 void compila_fator(Analisador *an, token *t) {
@@ -706,7 +954,10 @@ void compila_fator(Analisador *an, token *t) {
         char nome[MAX_COMPRIMENTO];
         strcpy(nome, an->palavraAtual);
         exigeDeclarado(an, nome);
-
+        int indiceValor = buscaSimbolo(an, nome);
+        if (indiceValor >= 0 && an->simbolos[indiceValor].classe != SIM_VARIAVEL &&
+            an->simbolos[indiceValor].classe != SIM_PARAMETRO && an->simbolos[indiceValor].classe != SIM_FUNCAO)
+            erro(an, "identificador nao pode ser usado em expressao");
         *t = proximoToken(an);
 
         if (*t == abrecolchetes)
@@ -720,24 +971,31 @@ void compila_fator(Analisador *an, token *t) {
             }
             if (*t != fechacolchetes)
                 ERRO("esperava ']' apos indice em fator");
-            *t = proximoToken(an);
+            erro(an, "arrays nao sao suportados pela linguagem deste compilador");
         }
         else if (*t == abreparenteses)
         {
+            int chamadaFuncao = buscaRotina(an, nome, SIM_FUNCAO);
+            if (chamadaFuncao < 0) erro(an, "identificador nao e uma funcao");
+            gera(an, "AMEM 1\n");
             *t = proximoToken(an);
-            if (*t != fechaparenteses)
-            {
-                compila_expressao(an, t);
-                while (*t == virgula)
-                {
-                    *t = proximoToken(an);
-                    compila_expressao(an, t);
-                }
-            }
-
+            if (*t != fechaparenteses) compilaArgumentos(an, t, chamadaFuncao);
+            else if (an->simbolos[chamadaFuncao].quantidadeParametros != 0) erro(an, "quantidade de argumentos diferente da declaracao");
             if (*t != fechaparenteses)
                 ERRO("esperava ')' ao final de chamada de funcao em fator");
+            gera(an, "CHPR L%d\n", an->simbolos[chamadaFuncao].rotuloCodigo);
+            strncpy(an->tipoExpressao, an->simbolos[chamadaFuncao].tipo, sizeof(an->tipoExpressao)-1);
             *t = proximoToken(an);
+        } else if (indiceValor >= 0 && an->simbolos[indiceValor].deslocamento != -1) {
+            if (an->simbolos[indiceValor].referencia)
+                gera(an, "CRVI %d, %d\n", nivelAcesso(an, &an->simbolos[indiceValor]), an->simbolos[indiceValor].deslocamento);
+            else
+                gera(an, "CRVL %d, %d\n", nivelAcesso(an, &an->simbolos[indiceValor]), an->simbolos[indiceValor].deslocamento);
+            strncpy(an->tipoExpressao, an->simbolos[indiceValor].tipo, sizeof(an->tipoExpressao)-1);
+        } else if (indiceValor >= 0 && an->simbolos[indiceValor].classe == SIM_FUNCAO) {
+            if (an->simbolos[indiceValor].quantidadeParametros != 0) erro(an, "funcao exige argumentos");
+            gera(an, "AMEM 1\nCHPR L%d\n", an->simbolos[indiceValor].rotuloCodigo);
+            strncpy(an->tipoExpressao, an->simbolos[indiceValor].tipo, sizeof(an->tipoExpressao)-1);
         }
     }
     else if (*t == abreparenteses)
@@ -753,9 +1011,14 @@ void compila_fator(Analisador *an, token *t) {
     {
         *t = proximoToken(an);
         compila_fator(an, t);
+        exigeTipo(an, tipoCompativel(an, an->tipoExpressao, "boolean"), "operador 'not' exige operando boolean");
+        gera(an, "CRCT 0\nCMIG\n");
+        strcpy(an->tipoExpressao, "boolean");
     }
     else if (*t == numero)
     {
+        gera(an, "CRCT %s\n", an->palavraAtual);
+        strcpy(an->tipoExpressao, "integer");
         *t = proximoToken(an);
     }
     else
@@ -768,16 +1031,20 @@ void compila_fator(Analisador *an, token *t) {
 // função principal, que inicializa o analisador, adiciona os procedimentos predefinidos "read" e "write" na tabela de simbolos, 
 // abre o arquivo de entrada, chama a função de compilar o programa, imprime a tabela de simbolos e fecha o arquivo
 int main(int argc, char **argv) {
-    const char *nomeArquivo = argc > 1 ? argv[1] : "exemplo.txt";   // permite passar o nome do arquivo como argumento, ou usar "exemplo.txt" por padrão
+    const char *nomeArquivo = argc > 1 ? argv[1] : "exemplo.txt";
+    const char *nomeSaida = argc > 2 ? argv[2] : "saida.mepa";
     Analisador an;
     memset(&an, 0, sizeof(an));                                     // inicializa o analisador com zeros, para garantir que os campos estejam limpos
     adicionaPreDefinido(&an, "read", SIM_PROCEDIMENTO);             // adiciona os procedimentos predefinidos "read" e "write" na tabela de simbolos, para que possam ser usados no programa sem precisar declarar
     adicionaPreDefinido(&an, "write", SIM_PROCEDIMENTO);
+    an.saida = fopen(nomeSaida, "w");
+    if (!an.saida) { fprintf(stderr, "Erro ao criar arquivo MEPA '%s'\n", nomeSaida); return 1; }
 
     an.arquivo = fopen(nomeArquivo, "r");   // tenta abrir o arquivo de entrada para leitura, e verifica se conseguiu abrir, caso contrário imprime uma mensagem de erro e encerra o programa
     if (!an.arquivo)
     {
         fprintf(stderr, "Erro ao abrir arquivo '%s'\n", nomeArquivo);
+        fclose(an.saida);
         return 1;
     }
 
@@ -785,5 +1052,6 @@ int main(int argc, char **argv) {
     imprimeTabelaSimbolos(&an);
 
     fclose(an.arquivo);
+    fclose(an.saida);
     return 0;
 }

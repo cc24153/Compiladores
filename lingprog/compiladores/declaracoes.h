@@ -42,7 +42,8 @@ typedef enum {
     SIM_VARIAVEL,
     SIM_PROCEDIMENTO,
     SIM_FUNCAO,
-    SIM_PARAMETRO
+    SIM_PARAMETRO,
+    SIM_ROTULO
 } ClasseSimbolo;
 
 // struct de simbolo para a tabela de simbolos, cada simbolo tem um nome, tipo, classe, linha e coluna onde foi declarado, escopo onde foi declarado 
@@ -55,6 +56,11 @@ typedef struct {
     int coluna;                 // coluna onde o simbolo foi declarado, usado para imprimir na tabela de simbolos
     int escopo;                 // escopo onde o simbolo foi declarado, usado para verificar se um identificador está no escopo correto, escopo é um numero inteiro que começa em 0 para o escopo global, e é incrementado para cada novo escopo (procedimento ou função) e decrementado ao sair do escopo
     int ativo;                  // indica se o simbolo está ativo (ainda pode ser usado) ou não (já saiu do escopo)
+    int deslocamento;
+    int rotuloCodigo;
+    int quantidadeParametros;
+    int referencia;
+    int donoEscopo;
 } Simbolo;
 
 
@@ -68,9 +74,17 @@ typedef struct {
     int colunaToken;                // coluna onde o token separado começa, usado para imprimir na tabela de simbolos
     char buf[MAX_COMPRIMENTO];      // onde vou montar o token separado, usado para separar os tokens e para imprimir na tabela de simbolos
     char palavraAtual[MAX_COMPRIMENTO]; // guarda a string do token separado, usada para passar a string do token para o analisador sintático e para imprimir na tabela de simbolos
+    char tipoExpressao[MAX_COMPRIMENTO];
     Simbolo simbolos[MAX_SIMBOLOS];     // tabela de simbolos, usada para armazenar os simbolos declarados no programa e para verificar se um identificador é declarado, se o tipo de uma variavel é conhecido, etc
     int totalSimbolos;              // total de simbolos na tabela de simbolos, usado para verificar se a tabela de simbolos está cheia e para imprimir a tabela de simbolos
     int escopoAtual;                // escopo atual, usado para verificar se um identificador está no escopo correto e para imprimir na tabela de simbolos
+    FILE *saida;
+    int proximoDeslocamento;
+    int proximoRotulo;
+    int rotuloPrincipal;
+    int deslocamentoPorEscopo[64];
+    int rotuloCorpoPorEscopo[64];
+    int simboloRotinaPorEscopo[64];
 } Analisador;
 
 

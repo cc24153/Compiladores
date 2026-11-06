@@ -1,0 +1,15 @@
+# Compilados e Executáveis (Binários)
+*.exe
+*.o
+*.obj
+*.out
+programa
+
+# Pastas de Configuração Local do Editor
+.vscode/
+
+# Arquivos de Log e Temporários
+*.log
+.DS_Store
+*.dSYM/
+Thumbs.db
