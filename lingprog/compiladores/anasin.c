@@ -168,7 +168,7 @@ void exigeDeclarado(Analisador *an, const char *nome){
 // imprimeTabelaSimbolos: imprime a tabela de símbolos no final da análise sintática, mostrando o nome, classe, tipo, linha e escopo de cada símbolo declarado no programa
 void imprimeTabelaSimbolos(Analisador *an) {
     printf("\nTabela de simbolos:\n");
-    printf("%-20s %-15s %-15s %-8s %-8s\n", "Nome", "Classe", "Tipo", "Linha", "Escopo");
+    printf("%-20s %-15s %-15s %-8s %-8s\n", "Nome", "Natureza", "Tipo", "Linha", "Escopo");
     printf("---------------------------------------------------------------------\n");
 
     for (int i = 0; i < an->totalSimbolos; i++)
