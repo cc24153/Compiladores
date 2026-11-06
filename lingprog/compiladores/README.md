@@ -1,12 +1,12 @@
-# Nome do Projeto 🚀
+# Compilador Pascal para MEPA
 
-#### Descricao do Projeto
+Compilador didático de um subconjunto de Pascal, desenvolvido em C. O projeto realiza análise léxica, sintática e semântica, mantém uma tabela de símbolos com controle de escopo e gera código para a máquina virtual MEPA.
+
+O código gerado é salvo em `saida.mepa` por padrão. A implementação trabalha com variáveis escalares e construções como atribuições, expressões, condicionais, laços, procedimentos, funções e comandos `read`/`write`. Arrays não são suportados.
 
 ---
 
-#### 🛠️ Pré-requisitos
-
-Antes de começar, você precisa garantir que o compilador de C e o editor de código estejam devidamente instalados no seu computador.
+### Pré-requisitos
 
 ##### 1. Instalar o Compilador (GCC)
 O VS Code é apenas um editor de texto e precisa de um compilador externo para rodar o código C.
@@ -29,33 +29,47 @@ Abra a aba de extensões do VS Code (`Ctrl + Shift + X` ou `Cmd + Shift + X`) e 
 
 ---
 
-#### 💻 Como Rodar o Projeto
+### Como Rodar
 
-##### 3. Executando o Código
+##### Compilar
 
-Existem duas formas principais de rodar o programa:
+Compile os dois arquivos `.c` juntos, pois `anasin.c` usa o analisador léxico implementado em `analex.c`:
 
-###### Opção A: Utilizando a extensão Code Runner (Mais Fácil)
-* Abra o seu arquivo `.c`.
-* Clique no ícone de **Play (Run Code)** localizado no canto superior direito do VS Code, ou utilize o atalho de teclado:
-  * **Windows/Linux:** `Ctrl + Alt + N`
-  * **macOS:** `Cmd + Option + N`
+```bash
+gcc -Wall -Wextra anasin.c analex.c -o compilador
+```
 
-###### Opção B: Compilação Manual via Terminal Integrado
-Se preferir usar o terminal interno do VS Code (`Ctrl + '` ou `Cmd + '`), digite os seguintes comandos:
+No macOS, também é possível usar `clang` no lugar de `gcc`.
 
-1. **Compilar o arquivo:**
-   ```bash
-   gcc main.c -o main
-   ```
-2. **Executar o programa gerado:**
-   *No Windows:*
-   ```bash
-   .\main.exe
-   ```
-   *No Linux/macOS:*
-   ```bash
-   ./main
-   ```
+##### Executar
+
+Passe o arquivo Pascal como primeiro argumento. O segundo argumento, que é opcional, define o nome do arquivo MEPA de saída:
+
+```bash
+./compilador exemplo.txt saida.mepa
+```
+
+Se o nome de saída for omitido, o compilador cria `saida.mepa` no diretório atual:
+
+```bash
+./compilador exemplo.txt
+```
+
+No Windows, execute `compilador.exe` em vez de `./compilador`:
+
+```powershell
+.\compilador.exe exemplo.txt saida.mepa
+```
+
+Após a compilação, `saida.mepa` contém as instruções geradas. Abra esse arquivo com o interpretador MEPA para executar o programa.
+
+> **Observação:** `exemplo.txt` contém duas declarações de `f` no mesmo escopo. Como o compilador rejeita identificadores duplicados, remova ou renomeie uma delas antes de usar esse exemplo como entrada.
 
 ---
+
+### Arquivos principais
+
+- `analex.c`: separa o código-fonte em tokens;
+- `anasin.c`: analisa a sintaxe e a semântica, mantém a tabela de símbolos e gera código MEPA;
+- `declaracoes.h`: define tokens, símbolos e estruturas compartilhadas;
+- `exemplo.txt`: exemplo de código-fonte Pascal.
