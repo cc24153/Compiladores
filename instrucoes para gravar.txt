@@ -19,3 +19,43 @@ gravar o sintático:
 instruções:
 	- quem fica com a parte 1 fala o nome de todos do grupo; todos falem seu nome no inicio; a ultima pessoa roda o codigo
 	- gravem a tela e selecionem com o mouse oq estão explicando
+
+
+
+Roteiro para demonstrar a geração de código MEPA
+
+No começo da demonstração, explique que o compilador lê um programa Pascal e grava as instruções MEPA em um arquivo de texto. No terminal PowerShell, na pasta do projeto, compile o compilador uma vez.
+
+gcc -Wall -Wextra anasin.c analex.c -o compilador.exe
+
+Em cada exemplo, mostre o comando no terminal e abra o arquivo Pascal e o MEPA lado a lado no VS Code. Selecione com o mouse a linha do Pascal e depois as instruções correspondentes.
+
+1. Soma e alocação de memória
+
+.\compilador.exe exemplos-video\01-soma.pas exemplos-video\01-soma.mepa
+
+- As três variáveis a, b e resultado geram AMEM 3.
+- Em a := 7, CRCT 7 carrega a constante e ARMZ 0, 0 grava o valor em a.
+- Em resultado := a + b, dois CRVL carregam os valores, SOMA faz a adição e ARMZ 0, 2 guarda o resultado.
+- O write gera IMPR. No fim do programa, DMEM 3 libera as três posições antes de PARA.
+- O programa deve imprimir 12.
+
+2. Repetição e decisão
+
+.\compilador.exe exemplos-video\02-contagem.pas exemplos-video\02-contagem.mepa
+
+- Em while n > 0, CMMA compara os valores e DSVF L3 sai do laço quando a condição é falsa.
+- Em if n = 2, CMIG testa a igualdade e DSVF L4 leva ao else quando a condição é falsa.
+- Em n := n - 1, SUBT faz a subtração e ARMZ atualiza n. DSVS L2 volta ao teste do while.
+- O programa deve imprimir 3, 20 e 1, nessa ordem.
+
+3. Procedimento, variável local e passagem por referência
+
+.\compilador.exe exemplos-video\03-dobro.pas exemplos-video\03-dobro.mepa
+
+- Em dobrar(numero), CREN 0, 0 passa o endereço de numero e CHPR L2 chama o procedimento.
+- Dentro do procedimento, AMEM 1 reserva a variável local calculo, MULT faz a multiplicação por 2 e ARMI 1, -3 atualiza a variável original por referência.
+- DMEM 1 libera a variável local antes de RTPR, que retorna ao programa principal. A variável global é liberada pelo DMEM 1 que aparece antes de PARA.
+- O programa deve imprimir 12.
+
+Para encerrar, mostre os três arquivos .mepa gerados. Os valores acima são os resultados esperados ao executar os programas no interpretador MEPA.

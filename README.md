@@ -63,8 +63,6 @@ No Windows, execute `compilador.exe` em vez de `./compilador`:
 
 Após a compilação, `saida.mepa` contém as instruções geradas. Abra esse arquivo com o interpretador MEPA para executar o programa.
 
-> **Observação:** `exemplo.txt` contém duas declarações de `f` no mesmo escopo. Como o compilador rejeita identificadores duplicados, remova ou renomeie uma delas antes de usar esse exemplo como entrada.
-
 ---
 
 ### Arquivos principais

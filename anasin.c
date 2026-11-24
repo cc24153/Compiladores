@@ -15,12 +15,6 @@ static void gera(Analisador *an, const char *fmt, ...) {
 
 static int novoRotulo(Analisador *an) { return ++an->proximoRotulo; }
 static int nivelAcesso(Analisador *an, Simbolo *s) { (void)an; return s->escopo; }
-static int buscaRotina(Analisador *an, const char *nome, ClasseSimbolo classe) {
-    for (int i = an->totalSimbolos - 1; i >= 0; --i)
-        if (an->simbolos[i].ativo && an->simbolos[i].classe == classe && strcmp(an->simbolos[i].nome, nome) == 0)
-            return i;
-    return -1;
-}
 int buscaSimbolo(Analisador *an, const char *nome);
 
 static void tipoBase(Analisador *an, const char *tipo, char *saida) {
@@ -31,6 +25,13 @@ static void tipoBase(Analisador *an, const char *tipo, char *saida) {
         strncpy(saida, an->simbolos[i].tipo, MAX_COMPRIMENTO - 1); saida[MAX_COMPRIMENTO - 1] = '\0';
     }
 }
+static int mesmoTipo(Analisador *an, const char *a, const char *b) {
+    char baseA[MAX_COMPRIMENTO], baseB[MAX_COMPRIMENTO];
+    tipoBase(an, a, baseA);
+    tipoBase(an, b, baseB);
+    return strcmp(baseA, baseB) == 0;
+}
+
 static int tipoNumerico(Analisador *an, const char *tipo) {
     char base[MAX_COMPRIMENTO]; tipoBase(an, tipo, base);
     return strcmp(base, "integer") == 0 || strcmp(base, "real") == 0;
@@ -297,10 +298,6 @@ void compila_programa(Analisador *an) {
     if (t != fimdearquivo){
         ERRO("conteudo inesperado apos '.'");
     }
-    int variaveisGlobais = 0;
-    for (int i = 0; i < an->totalSimbolos; ++i)
-        if (an->simbolos[i].escopo == 0 && an->simbolos[i].classe == SIM_VARIAVEL) variaveisGlobais++;
-    if (variaveisGlobais) gera(an, "DMEM %d\n", variaveisGlobais);
     gera(an, "PARA\n");
 
     printf("Programa sintaticamente correto!\n");
@@ -394,7 +391,7 @@ void compila_bloco(Analisador *an) {
             strcpy(tipoVar, an->palavraAtual);
             for (int i = 0; i < totalIds; i++)
                 adicionaSimbolo(an, ids[i], tipoVar, SIM_VARIAVEL);
-            if (an->escopoAtual == 0) gera(an, "AMEM %d\n", totalIds);
+            gera(an, "AMEM %d\n", totalIds);
 
             t = proximoToken(an);
             if (t != pontoevirgula)
@@ -438,10 +435,6 @@ void compila_bloco(Analisador *an) {
 
             int escopoProc = an->escopoAtual;
             compila_bloco(an);
-            int locaisProc = 0;
-            for (int si = 0; si < an->totalSimbolos; ++si)
-                if (an->simbolos[si].ativo && an->simbolos[si].escopo == escopoProc && an->simbolos[si].classe == SIM_VARIAVEL) locaisProc++;
-            if (locaisProc) gera(an, "DMEM %d\n", locaisProc);
             gera(an, "RTPR %d, %d\n", escopoProc, an->simbolos[idxProc].quantidadeParametros);
             saiEscopo(an);
 
@@ -489,17 +482,14 @@ void compila_bloco(Analisador *an) {
             strcpy(tipoRetorno, an->simbolos[indiceFuncao].tipo);
             adicionaSimbolo(an, nomeFuncao, tipoRetorno, SIM_VARIAVEL);
             int resultadoFuncao = buscaSimboloNoEscopoAtual(an, nomeFuncao);
+            int parametrosFunc = an->simbolos[indiceFuncao].quantidadeParametros;
+            an->simbolos[resultadoFuncao].deslocamento = -(parametrosFunc + 3);
+            an->deslocamentoPorEscopo[escopoFunc]--;
             t = proximoToken(an);
             if (t != pontoevirgula)
                 ERRO("esperava ';' apos cabecalho de 'function'");
 
             compila_bloco(an);
-            int parametrosFunc = an->simbolos[indiceFuncao].quantidadeParametros;
-            an->simbolos[resultadoFuncao].deslocamento = -(parametrosFunc + 3);
-            int locaisFunc = 0;
-            for (int si = 0; si < an->totalSimbolos; ++si)
-                if (an->simbolos[si].ativo && an->simbolos[si].escopo == escopoFunc && an->simbolos[si].classe == SIM_VARIAVEL && an->simbolos[si].deslocamento >= 0) locaisFunc++;
-            if (locaisFunc) gera(an, "DMEM %d\n", locaisFunc);
             gera(an, "RTPR %d, %d\n", escopoFunc, parametrosFunc);
             saiEscopo(an);
 
@@ -529,6 +519,8 @@ void compila_bloco(Analisador *an) {
         else if (t != fim)
             ERRO("esperava ';' ou 'end' apos comando");
     }
+    int locais = an->deslocamentoPorEscopo[an->escopoAtual];
+    if (locais) gera(an, "DMEM %d\n", locais);
 }
 
 void registraListaParametros(Analisador *an, char ids[][MAX_COMPRIMENTO], int totalIds, const char *tipoParam) {
@@ -671,7 +663,7 @@ void compila_parametros_formais(Analisador *an) {
             ordinal++;
         }
     }
-    an->simbolos[rotina].quantidadeParametros = ordinal;
+    an->deslocamentoPorEscopo[an->escopoAtual] = 0;
 }
 
 static void compilaArgumentos(Analisador *an, token *t, int rotina) {
@@ -689,7 +681,7 @@ static void compilaArgumentos(Analisador *an, token *t, int rotina) {
             int atual = buscaSimbolo(an, an->palavraAtual);
             if (atual < 0 || an->simbolos[atual].deslocamento == -1 ||
                 (an->simbolos[atual].classe != SIM_VARIAVEL && an->simbolos[atual].classe != SIM_PARAMETRO)) erro(an, "argumento var invalido");
-            if (!tipoCompativel(an, an->simbolos[atual].tipo, an->simbolos[indiceParametro].tipo)) erro(an, "tipo incompativel em argumento var");
+            if (!mesmoTipo(an, an->simbolos[atual].tipo, an->simbolos[indiceParametro].tipo)) erro(an, "tipo incompativel em argumento var");
             if (an->simbolos[atual].referencia)
                 gera(an, "CRVL %d, %d\n", nivelAcesso(an, &an->simbolos[atual]), an->simbolos[atual].deslocamento);
             else
@@ -700,11 +692,29 @@ static void compilaArgumentos(Analisador *an, token *t, int rotina) {
             if (!tipoCompativel(an, an->tipoExpressao, an->simbolos[indiceParametro].tipo)) erro(an, "tipo incompativel em argumento");
         }
         ordinal++;
-        if (*t == virgula) *t = proximoToken(an);
-        else break;
+        if (*t != virgula) break;
+        *t = proximoToken(an);
+        if (*t == fechaparenteses) erro(an, "esperava argumento apos ','");
     }
     int esperados = an->simbolos[rotina].quantidadeParametros;
     if (ordinal != esperados) erro(an, "quantidade de argumentos diferente da declaracao");
+}
+
+static void compila_chamada(Analisador *an, token *t, int rotina) {
+    Simbolo *simbolo = &an->simbolos[rotina];
+    if (simbolo->classe == SIM_FUNCAO) gera(an, "AMEM 1\n");
+
+    if (*t == abreparenteses) {
+        *t = proximoToken(an);
+        compilaArgumentos(an, t, rotina);
+        if (*t != fechaparenteses) erro(an, "esperava ')' ao final da chamada");
+        *t = proximoToken(an);
+    } else if (simbolo->quantidadeParametros != 0) {
+        erro(an, "chamada exige argumentos");
+    }
+
+    gera(an, "CHPR L%d\n", simbolo->rotuloCodigo);
+    if (simbolo->classe == SIM_FUNCAO) strcpy(an->tipoExpressao, simbolo->tipo);
 }
 
 void compila_comando(Analisador *an, token *t) {
@@ -729,9 +739,7 @@ void compila_comando_sem_rotulo(Analisador *an, token *t) {
         strcpy(nome, an->palavraAtual);
         exigeDeclarado(an, nome);
         int indiceIdentificador = buscaSimbolo(an, nome);
-        if (indiceIdentificador >= 0 && an->simbolos[indiceIdentificador].classe != SIM_VARIAVEL &&
-            an->simbolos[indiceIdentificador].classe != SIM_PARAMETRO && an->simbolos[indiceIdentificador].classe != SIM_FUNCAO)
-            erro(an, "identificador nao pode receber atribuicao nem ser chamado como comando");
+        Simbolo *simbolo = &an->simbolos[indiceIdentificador];
         *t = proximoToken(an);
 
         if (*t == abrecolchetes)
@@ -752,72 +760,64 @@ void compila_comando_sem_rotulo(Analisador *an, token *t) {
         {
             *t = proximoToken(an);
             compila_expressao(an, t);
-            int indiceDestino = buscaSimbolo(an, nome);
-            if (indiceDestino >= 0 && !tipoCompativel(an, an->simbolos[indiceDestino].tipo, an->tipoExpressao))
+            if (simbolo->classe != SIM_VARIAVEL && simbolo->classe != SIM_PARAMETRO)
+                erro(an, "destino invalido na atribuicao");
+            if (!tipoCompativel(an, simbolo->tipo, an->tipoExpressao))
                 erro(an, "tipos incompativeis na atribuicao");
-            if (indiceDestino >= 0 && an->simbolos[indiceDestino].deslocamento != -1) {
-                if (an->simbolos[indiceDestino].referencia)
-                    gera(an, "ARMI %d, %d\n", nivelAcesso(an, &an->simbolos[indiceDestino]), an->simbolos[indiceDestino].deslocamento);
-                else
-                    gera(an, "ARMZ %d, %d\n", nivelAcesso(an, &an->simbolos[indiceDestino]), an->simbolos[indiceDestino].deslocamento);
-            }
+            if (simbolo->referencia)
+                gera(an, "ARMI %d, %d\n", nivelAcesso(an, simbolo), simbolo->deslocamento);
+            else
+                gera(an, "ARMZ %d, %d\n", nivelAcesso(an, simbolo), simbolo->deslocamento);
         }
         else if (*t == abreparenteses)
         {
-            int ehRead = strcmp(nome, "read") == 0;
-            int ehWrite = strcmp(nome, "write") == 0;
+            if (simbolo->classe != SIM_PROCEDIMENTO)
+                erro(an, "chamada de procedimento invalida");
+            int ehRead = indiceIdentificador == 0;
+            int ehWrite = indiceIdentificador == 1;
+            if (!ehRead && !ehWrite) {
+                compila_chamada(an, t, indiceIdentificador);
+                return;
+            }
             *t = proximoToken(an);
-            if (*t != fechaparenteses)
-            {
-                if (ehRead) {
-                    do {
-                        if (*t != identificador) ERRO("read espera identificadores");
-                        char destino[MAX_COMPRIMENTO];
-                        strcpy(destino, an->palavraAtual);
-                        exigeDeclarado(an, destino);
-                        int idx = buscaSimbolo(an, destino);
-                        gera(an, "LEIT\n");
-                        if (idx >= 0 && an->simbolos[idx].deslocamento != -1) {
-                            if (an->simbolos[idx].referencia)
-                                gera(an, "ARMI %d, %d\n", nivelAcesso(an, &an->simbolos[idx]), an->simbolos[idx].deslocamento);
-                            else
-                                gera(an, "ARMZ %d, %d\n", nivelAcesso(an, &an->simbolos[idx]), an->simbolos[idx].deslocamento);
-                        }
-                        *t = proximoToken(an);
-                        if (*t == virgula) *t = proximoToken(an); else break;
-                    } while (1);
-                } else if (ehWrite) {
+            if (*t == fechaparenteses) erro(an, "chamada exige argumentos");
+            if (ehRead) {
+                do {
+                    if (*t != identificador) ERRO("read espera identificadores");
+                    char destino[MAX_COMPRIMENTO];
+                    strcpy(destino, an->palavraAtual);
+                    exigeDeclarado(an, destino);
+                    int idx = buscaSimbolo(an, destino);
+                    if (an->simbolos[idx].classe != SIM_VARIAVEL && an->simbolos[idx].classe != SIM_PARAMETRO)
+                        erro(an, "read espera variaveis ou parametros");
+                    gera(an, "LEIT\n");
+                    if (an->simbolos[idx].referencia)
+                        gera(an, "ARMI %d, %d\n", nivelAcesso(an, &an->simbolos[idx]), an->simbolos[idx].deslocamento);
+                    else
+                        gera(an, "ARMZ %d, %d\n", nivelAcesso(an, &an->simbolos[idx]), an->simbolos[idx].deslocamento);
+                    *t = proximoToken(an);
+                    if (*t == virgula) *t = proximoToken(an); else break;
+                } while (1);
+            } else {
+                compila_expressao(an, t);
+                gera(an, "IMPR\n");
+                while (*t == virgula) {
+                    *t = proximoToken(an);
                     compila_expressao(an, t);
                     gera(an, "IMPR\n");
-                    while (*t == virgula) {
-                        *t = proximoToken(an);
-                        compila_expressao(an, t);
-                        gera(an, "IMPR\n");
-                    }
-                } else {
-                    int chamada = buscaSimbolo(an, nome);
-                    if (chamada < 0 || an->simbolos[chamada].classe != SIM_PROCEDIMENTO || chamada <= 1)
-                        erro(an, "chamada de procedimento invalida");
-                    compilaArgumentos(an, t, chamada);
                 }
             }
 
             if (*t != fechaparenteses)
-                ERRO("esperava ')' ao final da chamada de procedimento");
-            if (!ehRead && !ehWrite) {
-                int chamada = buscaSimbolo(an, nome);
-                if (chamada >= 0 && (an->simbolos[chamada].classe == SIM_PROCEDIMENTO || an->simbolos[chamada].classe == SIM_FUNCAO))
-                    gera(an, "CHPR L%d\n", an->simbolos[chamada].rotuloCodigo);
-            }
+            ERRO("esperava ')' ao final da chamada de procedimento");
             *t = proximoToken(an);
         }
         else
         {
-            int idxChamada = buscaSimbolo(an, nome);
-            if (idxChamada >= 0 && an->simbolos[idxChamada].classe == SIM_PROCEDIMENTO && idxChamada > 1) {
-                if (an->simbolos[idxChamada].quantidadeParametros != 0) erro(an, "rotina exige argumentos");
-                gera(an, "CHPR L%d\n", an->simbolos[idxChamada].rotuloCodigo);
-            }
+            if (simbolo->classe != SIM_PROCEDIMENTO)
+                erro(an, "chamada de procedimento invalida");
+            if (indiceIdentificador <= 1) erro(an, "chamada exige argumentos");
+            compila_chamada(an, t, indiceIdentificador);
         }
     }
     else if (*t == vapara)
@@ -924,7 +924,7 @@ void compila_expressao_simples(Analisador *an, token *t) {
             strcpy(an->tipoExpressao, "boolean");
         } else {
             exigeTipo(an, tipoNumerico(an, esquerda) && tipoNumerico(an, an->tipoExpressao), "operador aritmetico exige operandos numericos");
-            if (tipoCompativel(an, esquerda, "real") || tipoCompativel(an, an->tipoExpressao, "real")) strcpy(an->tipoExpressao, "real");
+            if (mesmoTipo(an, esquerda, "real") || mesmoTipo(an, an->tipoExpressao, "real")) strcpy(an->tipoExpressao, "real");
         }
         emiteOperador(an, op);
     }
@@ -943,7 +943,7 @@ void compila_termo(Analisador *an, token *t) {
             strcpy(an->tipoExpressao, "boolean");
         } else {
             exigeTipo(an, tipoNumerico(an, esquerda) && tipoNumerico(an, an->tipoExpressao), "operador aritmetico exige operandos numericos");
-            if (tipoCompativel(an, esquerda, "real") || tipoCompativel(an, an->tipoExpressao, "real")) strcpy(an->tipoExpressao, "real");
+            if (mesmoTipo(an, esquerda, "real") || mesmoTipo(an, an->tipoExpressao, "real")) strcpy(an->tipoExpressao, "real");
         }
         emiteOperador(an, op);
     }
@@ -975,17 +975,14 @@ void compila_fator(Analisador *an, token *t) {
         }
         else if (*t == abreparenteses)
         {
-            int chamadaFuncao = buscaRotina(an, nome, SIM_FUNCAO);
-            if (chamadaFuncao < 0) erro(an, "identificador nao e uma funcao");
-            gera(an, "AMEM 1\n");
-            *t = proximoToken(an);
-            if (*t != fechaparenteses) compilaArgumentos(an, t, chamadaFuncao);
-            else if (an->simbolos[chamadaFuncao].quantidadeParametros != 0) erro(an, "quantidade de argumentos diferente da declaracao");
-            if (*t != fechaparenteses)
-                ERRO("esperava ')' ao final de chamada de funcao em fator");
-            gera(an, "CHPR L%d\n", an->simbolos[chamadaFuncao].rotuloCodigo);
-            strncpy(an->tipoExpressao, an->simbolos[chamadaFuncao].tipo, sizeof(an->tipoExpressao)-1);
-            *t = proximoToken(an);
+            Simbolo *valor = &an->simbolos[indiceValor];
+            int rotina = indiceValor;
+            // Na recursao, o nome tambem identifica a celula de retorno.
+            if (valor->classe == SIM_VARIAVEL && valor->deslocamento < 0)
+                rotina = valor->donoEscopo;
+            if (an->simbolos[rotina].classe != SIM_FUNCAO)
+                erro(an, "identificador nao e uma funcao");
+            compila_chamada(an, t, rotina);
         } else if (indiceValor >= 0 && an->simbolos[indiceValor].deslocamento != -1) {
             if (an->simbolos[indiceValor].referencia)
                 gera(an, "CRVI %d, %d\n", nivelAcesso(an, &an->simbolos[indiceValor]), an->simbolos[indiceValor].deslocamento);
@@ -993,9 +990,7 @@ void compila_fator(Analisador *an, token *t) {
                 gera(an, "CRVL %d, %d\n", nivelAcesso(an, &an->simbolos[indiceValor]), an->simbolos[indiceValor].deslocamento);
             strncpy(an->tipoExpressao, an->simbolos[indiceValor].tipo, sizeof(an->tipoExpressao)-1);
         } else if (indiceValor >= 0 && an->simbolos[indiceValor].classe == SIM_FUNCAO) {
-            if (an->simbolos[indiceValor].quantidadeParametros != 0) erro(an, "funcao exige argumentos");
-            gera(an, "AMEM 1\nCHPR L%d\n", an->simbolos[indiceValor].rotuloCodigo);
-            strncpy(an->tipoExpressao, an->simbolos[indiceValor].tipo, sizeof(an->tipoExpressao)-1);
+            compila_chamada(an, t, indiceValor);
         }
     }
     else if (*t == abreparenteses)
