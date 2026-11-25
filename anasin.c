@@ -88,7 +88,7 @@ void erro(Analisador *an, const char *mensagem) {   // recebe an que é o anasin
 void entraEscopo(Analisador *an) {
     if (an->escopoAtual >= 62) erro(an, "limite de escopos excedido");
     an->escopoAtual++;
-    an->deslocamentoPorEscopo[an->escopoAtual] = 0;  // incrementa o escopo atual para entrar em um novo escopo, usado para procedimentos e funções, e para verificar se um identificador está no escopo correto
+    an->deslocamentoPorEscopo[an->escopoAtual] = 0;  // zera o deslocamento das variaveis no novo escopo
 }
 void saiEscopo(Analisador *an) {
     for (int i = 0; i < an->totalSimbolos; i++) // desativa todos os símbolos que estão no escopo atual, ou seja, que não podem mais ser usados, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto
@@ -188,7 +188,7 @@ void adicionaSimbolo(Analisador *an, const char *nome, const char *tipoNome, Cla
     simbolo->rotuloCodigo = (classe == SIM_ROTULO || classe == SIM_PROCEDIMENTO || classe == SIM_FUNCAO) ? novoRotulo(an) : -1;
     simbolo->quantidadeParametros = 0;
     simbolo->referencia = 0;
-    simbolo->donoEscopo = an->escopoAtual > 0 ? an->simboloRotinaPorEscopo[an->escopoAtual] : -1;                                         // marca o símbolo como ativo, ou seja, que ainda pode ser usado, para garantir que identificadores declarados em escopos anteriores não sejam usados fora do escopo correto
+    simbolo->donoEscopo = an->escopoAtual > 0 ? an->simboloRotinaPorEscopo[an->escopoAtual] : -1;  // registra a rotina dona do escopo; -1 indica o escopo global
 }
 // adicionaPreDefinido: recebe um nome e uma classe, e adiciona um símbolo pré-definido na tabela de símbolos, usado para adicionar os tipos pré-definidos e os procedimentos de entrada/saída
 // ele faz isso toda vez que o programa é executado, para garantir que os símbolos pré-definidos estejam sempre na tabela de símbolos, mesmo que o programa fonte não declare nenhum tipo ou procedimento, e para garantir que sejam reconhecidos como tipos e procedimentos conhecidos durante a análise sintática
@@ -304,7 +304,6 @@ void compila_programa(Analisador *an) {
     printf("Programa sintaticamente correto!\n");
 }
 
-// preguica de comentar todos esses compila:
 
 void compila_bloco(Analisador *an) {
     token t = proximoToken(an);
