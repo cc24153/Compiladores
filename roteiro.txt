@@ -13,26 +13,41 @@ Cada pessoa mostra seu trecho em anasin.c, executa o compilador no terminal e co
 
 Preparação para os três
 
-Antes de gravar, abra o PowerShell na pasta do projeto e prepare o compilador com o comando abaixo. Durante a gravação, mostre o comando do seu exemplo para o público ver o arquivo MEPA sendo gerado. Abra o .pas e o .mepa lado a lado no VS Code e destaque as linhas com o mouse.
+Antes de gravar, abra o PowerShell na pasta do projeto e prepare o compilador com o comando abaixo. 
+Durante a gravação, mostre o comando do seu exemplo para o público ver o arquivo MEPA sendo gerado. 
+Abra o .pas e o .mepa lado a lado no VS Code e destaque as linhas com o mouse.
 
 gcc -Wall -Wextra anasin.c analex.c -o compilador.exe
+
+
 
 Parte 1 — Mariana Marietti da Costa — Soma e memória
 
 0:00–0:20 — Apresentação
-Fala: “Oi, eu sou a Mariana. O trabalho é meu, da Rafaelly Maria Nascimento da Silva e do Samuel Rosa Parra. Vamos compilar três programas em Pascal e mostrar onde o compilador gera as instruções MEPA.”
+Fala: “Oi, eu sou a Mariana. O trabalho é meu, da Rafaelly Maria Nascimento da Silva e do Samuel Rosa Parra. 
+Vamos compilar três programas em Pascal e mostrar onde o compilador gera as instruções MEPA.”
 
 0:20–0:55 — Mostrar o gerador no código C
-Abra anasin.c na função gera (linha 9). Destaque vfprintf e an->saida. Em seguida, mostre compila_bloco, com AMEM (linha 396) e DMEM (linha 526).
-Fala: “A função gera escreve a instrução no arquivo de saída. Quando compila_bloco lê uma declaração, ele usa a quantidade de variáveis para emitir AMEM. No final do bloco, usa DMEM para liberar essa memória.”
+Abra anasin.c na função gera (linha 9). Destaque vfprintf e an->saida. Em seguida, mostre compila_bloco, 
+com AMEM (linha 396) e DMEM (linha 526).
+Fala: “A função gera escreve a instrução no arquivo de saída. Quando compila_bloco lê uma declaração, 
+ele usa a quantidade de variáveis para emitir AMEM. No final do bloco, usa DMEM para liberar essa memória.”
 
 0:55–1:50 — Compilar e comparar os arquivos
 .\compilador.exe exemplos-video\01-soma.pas exemplos-video\01-soma.mepa
 
-Fala: “Aqui temos três variáveis, então a saída contém AMEM 3. Em a := 7, CRCT 7 coloca a constante na pilha e ARMZ 0, 0 guarda o valor em a. Para resultado := a + b, os dois CRVL carregam a e b, SOMA faz a adição e ARMZ 0, 2 grava o resultado. IMPR vem de write(resultado), que deve imprimir 12. No fim, DMEM 3 libera as três posições.”
+Fala: “Aqui temos três variáveis, então a saída contém AMEM 3. Em a := 7, CRCT 7 coloca a constante na pilha 
+e ARMZ 0, 0 guarda o valor em a. Para resultado := a + b, os dois CRVL carregam a e b, 
+SOMA faz a adição e ARMZ 0, 2 grava o resultado. IMPR vem de write(resultado), que deve imprimir 12. 
+No fim, DMEM 3 libera as três posições.”
+
+
 
 1:50–2:00 — Passagem
 Fala: “Agora a Rafaelly vai mostrar como a MEPA representa decisões e repetições.”
+
+
+
 
 Parte 2 — Rafaelly Maria Nascimento da Silva — While e if/else
 
@@ -50,6 +65,10 @@ Fala: “No Pascal temos while n > 0. No MEPA, CMMA compara os valores e DSVF L3
 
 1:50–2:00 — Passagem
 Fala: “Agora o Samuel vai mostrar como o compilador gera a chamada de um procedimento.”
+
+
+
+
 
 Parte 3 — Samuel Rosa Parra — Procedimento e parâmetro por referência
 
