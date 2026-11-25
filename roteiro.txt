@@ -1,0 +1,72 @@
+
+instruções:
+	- quem fica com a parte 1 fala o nome de todos do grupo; todos falem seu nome no inicio; a ultima pessoa roda o codigo
+	- gravem a tela e selecionem com o mouse oq estão explicando
+
+
+
+Roteiro do vídeo de geração MEPA
+
+Ordem de gravação: Mariana, Rafaelly e Samuel.
+Tempo sugerido: 2 minutos para cada integrante, cerca de 6 minutos no total.
+Cada pessoa mostra seu trecho em anasin.c, executa o compilador no terminal e compara o Pascal com o MEPA gerado.
+
+Preparação para os três
+
+Antes de gravar, abra o PowerShell na pasta do projeto e prepare o compilador com o comando abaixo. Durante a gravação, mostre o comando do seu exemplo para o público ver o arquivo MEPA sendo gerado. Abra o .pas e o .mepa lado a lado no VS Code e destaque as linhas com o mouse.
+
+gcc -Wall -Wextra anasin.c analex.c -o compilador.exe
+
+Parte 1 — Mariana Marietti da Costa — Soma e memória
+
+0:00–0:20 — Apresentação
+Fala: “Oi, eu sou a Mariana. O trabalho é meu, da Rafaelly Maria Nascimento da Silva e do Samuel Rosa Parra. Vamos compilar três programas em Pascal e mostrar onde o compilador gera as instruções MEPA.”
+
+0:20–0:55 — Mostrar o gerador no código C
+Abra anasin.c na função gera (linha 9). Destaque vfprintf e an->saida. Em seguida, mostre compila_bloco, com AMEM (linha 396) e DMEM (linha 526).
+Fala: “A função gera escreve a instrução no arquivo de saída. Quando compila_bloco lê uma declaração, ele usa a quantidade de variáveis para emitir AMEM. No final do bloco, usa DMEM para liberar essa memória.”
+
+0:55–1:50 — Compilar e comparar os arquivos
+.\compilador.exe exemplos-video\01-soma.pas exemplos-video\01-soma.mepa
+
+Fala: “Aqui temos três variáveis, então a saída contém AMEM 3. Em a := 7, CRCT 7 coloca a constante na pilha e ARMZ 0, 0 guarda o valor em a. Para resultado := a + b, os dois CRVL carregam a e b, SOMA faz a adição e ARMZ 0, 2 grava o resultado. IMPR vem de write(resultado), que deve imprimir 12. No fim, DMEM 3 libera as três posições.”
+
+1:50–2:00 — Passagem
+Fala: “Agora a Rafaelly vai mostrar como a MEPA representa decisões e repetições.”
+
+Parte 2 — Rafaelly Maria Nascimento da Silva — While e if/else
+
+0:00–0:20 — Apresentação
+Fala: “Oi, eu sou a Rafaelly. Meu exemplo começa com n igual a 3, conta até 1 e imprime 20 no lugar do 2.”
+
+0:20–0:55 — Mostrar o gerador no código C
+Abra anasin.c em compila_comando_sem_rotulo. Destaque o DSVF do if (linha 867) e o DSVF e o DSVS do while (linhas 891 e 894).
+Fala: “O compilador gera a condição antes do salto. DSVF desvia quando a condição é falsa. No while, o DSVS ao final do corpo volta para testar a condição de novo.”
+
+0:55–1:50 — Compilar e comparar os arquivos
+.\compilador.exe exemplos-video\02-contagem.pas exemplos-video\02-contagem.mepa
+
+Fala: “No Pascal temos while n > 0. No MEPA, CMMA compara os valores e DSVF L3 sai do laço se a condição for falsa. Dentro do laço, CMIG testa n = 2 e DSVF L4 leva ao else quando o teste é falso. No fim, SUBT e ARMZ decrementam n, e DSVS L2 volta para o início do teste. A sequência esperada é 3, 20 e 1.”
+
+1:50–2:00 — Passagem
+Fala: “Agora o Samuel vai mostrar como o compilador gera a chamada de um procedimento.”
+
+Parte 3 — Samuel Rosa Parra — Procedimento e parâmetro por referência
+
+0:00–0:20 — Apresentação
+Fala: “Oi, eu sou o Samuel. Meu programa passa numero para dobrar, que usa uma variável local e modifica a variável original.”
+
+0:20–0:55 — Mostrar o gerador no código C
+Abra anasin.c em compilaArgumentos, perto do CREN (linha 692), e em compila_chamada, perto de CHPR (linha 721).
+Fala: “Como o parâmetro foi declarado com var, aqui o compilador emite CREN para passar o endereço da variável. Depois, compila_chamada emite CHPR para ir ao rótulo do procedimento.”
+
+0:55–1:50 — Compilar e comparar os arquivos
+.\compilador.exe exemplos-video\03-dobro.pas exemplos-video\03-dobro.mepa
+
+Fala: “A chamada dobrar(numero) vira CREN 0, 0 e CHPR L2. Depois de ENPR, o AMEM 1 reserva espaço para calculo. MULT multiplica por 2 e ARMI 1, -3 grava nesse endereço recebido, atualizando numero. DMEM 1 libera calculo e RTPR volta para o programa principal. O write final deve imprimir 12.”
+
+1:50–2:00 — Encerramento
+Mostre os três arquivos .mepa na árvore do VS Code.
+Fala: “Esses são os três arquivos MEPA que o compilador gerou a partir dos programas em Pascal.”
+
+Os valores citados no roteiro são as saídas esperadas no interpretador MEPA. Os comandos mostrados na gravação geram os arquivos .mepa.

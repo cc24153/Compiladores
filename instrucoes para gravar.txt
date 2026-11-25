@@ -59,3 +59,6 @@ Em cada exemplo, mostre o comando no terminal e abra o arquivo Pascal e o MEPA l
 - O programa deve imprimir 12.
 
 Para encerrar, mostre os três arquivos .mepa gerados. Os valores acima são os resultados esperados ao executar os programas no interpretador MEPA.
+
+3 exemplos p compilador compilar, mostrar o codigo mepa gerado, comparando o codigo mepa c o programa original
+no codigo onde que ta a geracao de codigo mepa

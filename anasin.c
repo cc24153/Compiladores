@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include "declaracoes.h"
 
+// VIDEO - PARTE 1 (MARIANA) - Escrita no arquivo MEPA
 static void gera(Analisador *an, const char *fmt, ...) {
     if (!an->saida) return;
     va_list ap;
@@ -391,6 +392,7 @@ void compila_bloco(Analisador *an) {
             strcpy(tipoVar, an->palavraAtual);
             for (int i = 0; i < totalIds; i++)
                 adicionaSimbolo(an, ids[i], tipoVar, SIM_VARIAVEL);
+            // VIDEO - PARTE 1 (MARIANA) - Alocacao das variaveis
             gera(an, "AMEM %d\n", totalIds);
 
             t = proximoToken(an);
@@ -520,6 +522,7 @@ void compila_bloco(Analisador *an) {
             ERRO("esperava ';' ou 'end' apos comando");
     }
     int locais = an->deslocamentoPorEscopo[an->escopoAtual];
+    // VIDEO - PARTE 1 (MARIANA) - Desalocacao ao fechar o bloco
     if (locais) gera(an, "DMEM %d\n", locais);
 }
 
@@ -666,6 +669,7 @@ void compila_parametros_formais(Analisador *an) {
     an->deslocamentoPorEscopo[an->escopoAtual] = 0;
 }
 
+// VIDEO - PARTE 3 (SAMUEL) - Argumentos e passagem de endereco com CREN
 static void compilaArgumentos(Analisador *an, token *t, int rotina) {
     int ordinal = 0;
     while (*t != fechaparenteses) {
@@ -700,6 +704,7 @@ static void compilaArgumentos(Analisador *an, token *t, int rotina) {
     if (ordinal != esperados) erro(an, "quantidade de argumentos diferente da declaracao");
 }
 
+// VIDEO - PARTE 3 (SAMUEL) - Chamada de rotina com CHPR
 static void compila_chamada(Analisador *an, token *t, int rotina) {
     Simbolo *simbolo = &an->simbolos[rotina];
     if (simbolo->classe == SIM_FUNCAO) gera(an, "AMEM 1\n");
@@ -858,6 +863,7 @@ void compila_comando_sem_rotulo(Analisador *an, token *t) {
         if (*t != entao)
             ERRO("esperava 'then' apos condicao do 'if'");
 
+        // VIDEO - PARTE 2 (RAFAELLY) - Desvios do if/else
         gera(an, "DSVF L%d\n", rotuloSenao);
         *t = proximoToken(an);
         compila_comando_sem_rotulo(an, t);
@@ -881,6 +887,7 @@ void compila_comando_sem_rotulo(Analisador *an, token *t) {
         if (*t != faca)
             ERRO("esperava 'do' apos condicao do 'while'");
 
+        // VIDEO - PARTE 2 (RAFAELLY) - Saida e retorno ao teste do while
         gera(an, "DSVF L%d\n", rotuloFim);
         *t = proximoToken(an);
         compila_comando_sem_rotulo(an, t);
